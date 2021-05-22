@@ -1,0 +1,22 @@
+[package]
+name = "tau-engine"
+version = "0.1.0"
+authors = ["Alex Kornitzer <a.kornitzer@me.com>"]
+edition = "2018"
+description = "A document tagging library"
+repository = "https://github.com/countercept/tau-engine"
+readme = "README.md"
+
+
+[dependencies]
+aho-corasick = "0.7"
+dyndat = { path = "/home/alex/Developer/dyndat", features = ["json"] }
+regex = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.8"
+tracing = "0.1"
+
+
+[features]
+benchmarks = []
