@@ -1,0 +1,53 @@
+---
+detection:
+  A:
+    process.name:
+      - cmd
+    process.args: i*/q /c*
+  B:
+    process.args: i*1> \\127.0.0.1*
+  C:
+    process.args: i*/q /c echo*
+  D:
+    process.args: ?.*dir.*
+  E:
+    parent.name:
+      - explorer
+  F:
+    parent.name:
+      - wmiprvse
+    process.name:
+      - cmd
+    process.args:
+      - ?^/Q /c netstat -anop TCP.*\\\\127\.0\.0\.1\\ADMIN\$\\__[0-9]{4,10}
+    customer: flightrisk
+    ids:
+      - id: e2ec14cb-299e-4adf-bb09-04a6a8417bca
+      - id: e2ec14cb-299e-4adf-bb09-04a6a8417bcb
+      - id: e2ec14cb-299e-4adf-bb09-04a6a8417bcc
+      - id: e2ec14cb-299e-4adf-bb09-04a6a8417bcd
+      - id: e2ec14cb-299e-4adf-bb09-04a6a8417bce
+      - id: e2ec14cb-299e-4adf-bb09-04a6a8417bcf
+      - id: e2ec14cb-299e-4adf-bb09-04a6a8417bcg
+      - id: e2ec14cb-299e-4adf-bb09-04a6a8417bch
+      - id: e2ec14cb-299e-4adf-bb09-04a6a8417bci
+      - id: e2ec14cb-299e-4adf-bb09-04a6a8417bcj
+  condition: ((A and B) or C) and not (D or E or F)
+true_positives:
+  - customer: flightrisk
+    parent:
+      name: wmiprvse
+    process:
+      name: cmd
+      args: /Q /c netstat -anop TCP 1> \\127.0.0.1\ADMIN$\__1573814431.09 2>&1
+    ids:
+      - id: e2ec14cb-299e-4adf-bb09-04a6a8417bcz
+true_negatives:
+  - customer: flightrisk
+    parent:
+      name: wmiprvse
+    process:
+      name: cmd
+      args: /Q /c netstat -anop TCP 1> \\127.0.0.1\ADMIN$\__1573814431.09 2>&1
+    ids:
+      - id: e2ec14cb-299e-4adf-bb09-04a6a8417bca

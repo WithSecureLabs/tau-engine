@@ -1,0 +1,17 @@
+detection:
+  A:
+    x: foo
+    y: bar
+    z: baz
+
+  condition: A
+
+true_positives:
+  - x: foo 
+    y: bar
+    z: baz
+
+true_negatives:
+  - x: foo 
+    y: bar
+    z: boop

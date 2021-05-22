@@ -1,0 +1,33 @@
+[package]
+name = "tau-engine"
+version = "1.0.0"
+authors = ["Alex Kornitzer <a.kornitzer@me.com>"]
+edition = "2018"
+description = "A document tagging library"
+repository = "https://github.com/countercept/tau-engine"
+keywords = ["rule", "search", "tag", "tau"]
+license = "MIT"
+readme = "README.md"
+
+
+[dependencies]
+aho-corasick = "0.7"
+regex = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", optional = true }
+serde_yaml = "0.8"
+tracing = "0.1"
+
+
+[dev-dependencies]
+paste = "1.0"
+
+
+[features]
+benchmarks = []
+ignore_case = []
+json = ["serde_json"]
+
+
+[package.metadata.docs.rs]
+features = ["json"]

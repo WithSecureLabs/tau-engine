@@ -1,0 +1,11 @@
+detection:
+  A:
+    value: true
+
+  condition: A
+
+true_positives:
+  - value: true
+
+true_negatives:
+  - value: false

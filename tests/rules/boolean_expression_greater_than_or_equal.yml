@@ -1,0 +1,8 @@
+detection:
+  condition: int(value) >= 1
+
+true_positives:
+  - value: 1
+
+true_negatives:
+  - value: 0

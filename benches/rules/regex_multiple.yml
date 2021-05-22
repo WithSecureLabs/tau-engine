@@ -1,0 +1,18 @@
+---
+detection:
+  A:
+    phrase:
+      - ?(^|.*\s+)the(\s+.*|$)
+      - ?(^|.*\s+)quick(\s+.*|$)
+      - ?(^|.*\s+)brown(\s+.*|$)
+      - ?(^|.*\s+)fox(\s+.*|$)
+      - ?(^|.*\s+)jumps(\s+.*|$)
+      - ?(^|.*\s+)over(\s+.*|$)
+      - ?(^|.*\s+)the(\s+.*|$)
+      - ?(^|.*\s+)lazy(\s+.*|$)
+      - ?(^|.*\s+)dog(\s+.*|$)
+  condition: A
+true_positives:
+  - phrase: all dog
+true_negatives:
+  - phrase: lorem ipsum dolor sit amet
