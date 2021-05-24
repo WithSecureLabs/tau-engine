@@ -3,13 +3,13 @@ use regex::{Regex, RegexBuilder};
 #[derive(Clone, Debug)]
 pub enum Identifier {
     Contains(String),
-    Equal(i32),
+    Equal(i64),
     EndsWith(String),
     Exact(String),
-    GreaterThan(i32),
-    GreaterThanOrEqual(i32),
-    LessThan(i32),
-    LessThanOrEqual(i32),
+    GreaterThan(i64),
+    GreaterThanOrEqual(i64),
+    LessThan(i64),
+    LessThanOrEqual(i64),
     Regex(Regex),
     StartsWith(String),
 }
@@ -31,31 +31,31 @@ impl IdentifierParser for String {
         } else if self.starts_with(">=") {
             Ok(Identifier::GreaterThanOrEqual(
                 self.as_str()[2..]
-                    .parse::<i32>()
+                    .parse::<i64>()
                     .map_err(crate::error::parse_invalid_ident)?,
             ))
         } else if self.starts_with('>') {
             Ok(Identifier::GreaterThan(
                 self.as_str()[1..]
-                    .parse::<i32>()
+                    .parse::<i64>()
                     .map_err(crate::error::parse_invalid_ident)?,
             ))
         } else if self.starts_with("<=") {
             Ok(Identifier::LessThanOrEqual(
                 self.as_str()[2..]
-                    .parse::<i32>()
+                    .parse::<i64>()
                     .map_err(crate::error::parse_invalid_ident)?,
             ))
         } else if self.starts_with('<') {
             Ok(Identifier::LessThan(
                 self.as_str()[1..]
-                    .parse::<i32>()
+                    .parse::<i64>()
                     .map_err(crate::error::parse_invalid_ident)?,
             ))
         } else if self.starts_with('=') {
             Ok(Identifier::Equal(
                 self.as_str()[1..]
-                    .parse::<i32>()
+                    .parse::<i64>()
                     .map_err(crate::error::parse_invalid_ident)?,
             ))
         } else if self.starts_with('*') && self.ends_with('*') {

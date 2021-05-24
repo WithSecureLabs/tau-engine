@@ -346,14 +346,3 @@ where
         self.len()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn hi() {
-        let v = vec![1, 2, 3];
-        let _ = Value::Array(&v);
-    }
-}

@@ -37,7 +37,7 @@ pub enum SearchSym {
 pub enum Token {
     Delimiter(DelSym),
     Identifier(String),
-    Integer(i32),
+    Integer(i64),
     Operator(BoolSym),
     Miscellaneous(MiscSym),
     Search(SearchSym),

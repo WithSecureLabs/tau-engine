@@ -46,7 +46,7 @@ pub enum Expression {
     Cast(String, MiscSym),
     Field(String),
     Identifier(String),
-    Integer(i32),
+    Integer(i64),
     Negate(Box<Expression>),
     Search(Search, String),
 }
@@ -429,13 +429,6 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         BoolSym::GreaterThanOrEqual,
                         Box::new(Expression::Integer(i)),
                     ),
-                    Identifier::Contains(c) => {
-                        Expression::Search(Search::Contains(c), k.to_owned())
-                    }
-                    Identifier::EndsWith(c) => {
-                        Expression::Search(Search::EndsWith(c), k.to_owned())
-                    }
-                    Identifier::Exact(c) => Expression::Search(Search::Exact(c), k.to_owned()),
                     Identifier::LessThan(i) => Expression::BooleanExpression(
                         Box::new(Expression::Field(k.to_owned())),
                         BoolSym::LessThan,
@@ -447,9 +440,65 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         Box::new(Expression::Integer(i)),
                     ),
                     Identifier::Regex(c) => Expression::Search(Search::Regex(c), k.to_owned()),
-                    Identifier::StartsWith(c) => {
-                        Expression::Search(Search::StartsWith(c), k.to_owned())
-                    }
+                    // NOTE: Off because we want case insensitive everywhere...
+                    //Identifier::Contains(c) => {
+                    //    Expression::Search(Search::Contains(c), k.to_owned())
+                    //}
+                    //Identifier::EndsWith(c) => {
+                    //    Expression::Search(Search::EndsWith(c), k.to_owned())
+                    //}
+                    //Identifier::Exact(c) => Expression::Search(Search::Exact(c), k.to_owned()),
+                    //Identifier::StartsWith(c) => {
+                    //    Expression::Search(Search::StartsWith(c), k.to_owned())
+                    //}
+                    Identifier::Contains(c) => Expression::Search(
+                        Search::AhoCorasick(
+                            Box::new(
+                                AhoCorasickBuilder::new()
+                                    .ascii_case_insensitive(true) // XXX: This should be a setting
+                                    .dfa(true)
+                                    .build(vec![c.clone()]),
+                            ),
+                            vec![MatchType::Contains(c)],
+                        ),
+                        k.to_owned(),
+                    ),
+                    Identifier::EndsWith(c) => Expression::Search(
+                        Search::AhoCorasick(
+                            Box::new(
+                                AhoCorasickBuilder::new()
+                                    .ascii_case_insensitive(true) // XXX: This should be a setting
+                                    .dfa(true)
+                                    .build(vec![c.clone()]),
+                            ),
+                            vec![MatchType::EndsWith(c)],
+                        ),
+                        k.to_owned(),
+                    ),
+                    Identifier::Exact(c) => Expression::Search(
+                        Search::AhoCorasick(
+                            Box::new(
+                                AhoCorasickBuilder::new()
+                                    .ascii_case_insensitive(true) // XXX: This should be a setting
+                                    .dfa(true)
+                                    .build(vec![c.clone()]),
+                            ),
+                            vec![MatchType::Exact(c)],
+                        ),
+                        k.to_owned(),
+                    ),
+                    Identifier::StartsWith(c) => Expression::Search(
+                        Search::AhoCorasick(
+                            Box::new(
+                                AhoCorasickBuilder::new()
+                                    .ascii_case_insensitive(true) // XXX: This should be a setting
+                                    .dfa(true)
+                                    .build(vec![c.clone()]),
+                            ),
+                            vec![MatchType::StartsWith(c)],
+                        ),
+                        k.to_owned(),
+                    ),
                 };
                 match expression {
                     Some(e) => {
