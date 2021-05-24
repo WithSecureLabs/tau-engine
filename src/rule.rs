@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use serde_yaml::Value;
 
 use crate::parser::{self, Expression};
-use crate::solver::{self, SearchIdentifier};
 use crate::tokeniser::Tokeniser;
 
 #[derive(Clone, Serialize)]
@@ -14,7 +13,7 @@ pub struct Detection {
     #[serde(skip_serializing)]
     pub expression: Expression,
     #[serde(skip_serializing)]
-    pub identifiers: HashMap<String, SearchIdentifier>,
+    pub identifiers: HashMap<String, Expression>,
 
     #[serde(rename = "condition")]
     expression_raw: String,
@@ -46,7 +45,7 @@ impl<'de> Deserialize<'de> for Detection {
             where
                 V: MapAccess<'de>,
             {
-                let mut identifiers: HashMap<String, SearchIdentifier> = HashMap::new();
+                let mut identifiers: HashMap<String, Expression> = HashMap::new();
                 let mut identifiers_raw: HashMap<String, Value> = HashMap::new();
                 let mut expression = None;
                 while let Some(key) = map.next_key::<String>()? {
@@ -65,48 +64,16 @@ impl<'de> Deserialize<'de> for Detection {
                                 )));
                             }
                             let v: Value = map.next_value()?;
+                            identifiers.insert(
+                                key.to_string(),
+                                parser::parse_identifier(&v).map_err(|e| {
+                                    de::Error::custom(format!(
+                                        "failed to parse identifier - {:?}",
+                                        e
+                                    ))
+                                })?,
+                            );
                             identifiers_raw.insert(key.to_string(), v.clone());
-                            let value = match v {
-                                Value::Sequence(v) => match SearchIdentifier::from_sequence(&v) {
-                                    Ok(value) => value,
-                                    Err(err) => {
-                                        return Err(de::Error::custom(format_args!(
-                                            "invalid value: {}",
-                                            err
-                                        )));
-                                    }
-                                },
-                                Value::Mapping(m) => match SearchIdentifier::from_mapping(&m) {
-                                    Ok(value) => value,
-                                    Err(err) => {
-                                        return Err(de::Error::custom(format_args!(
-                                            "invalid value: {}",
-                                            err
-                                        )));
-                                    }
-                                },
-                                Value::Bool(_) => {
-                                    return Err(de::Error::custom(format_args!(
-                                        "invalid type: bool, expected map or sequence"
-                                    )));
-                                }
-                                Value::Number(_) => {
-                                    return Err(de::Error::custom(format_args!(
-                                        "invalid type: number, expected map or sequence"
-                                    )));
-                                }
-                                Value::Null => {
-                                    return Err(de::Error::custom(format_args!(
-                                        "invalid type: null, expected map or sequence"
-                                    )));
-                                }
-                                Value::String(_) => {
-                                    return Err(de::Error::custom(format_args!(
-                                        "invalid type: string, expected map or sequence"
-                                    )));
-                                }
-                            };
-                            identifiers.insert(key.to_string(), value);
                         }
                     }
                 }

@@ -48,6 +48,9 @@ impl fmt::Debug for Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let desc = match self.inner.kind {
+            Kind::Parse(Parse::InvalidIdentifier) => {
+                "an invalid identifier was encountered during parsing"
+            }
             Kind::Parse(Parse::InvalidExpression) => {
                 "an invalid expression was provided to the parser"
             }
@@ -88,11 +91,13 @@ pub enum Kind {
     Token(Token),
 }
 
-/// The `Kind` of `tau_engine::Error` when tokenising.
+/// The `Kind` of `tau_engine::Error` when parsing.
 #[derive(Debug)]
 pub enum Parse {
     /// An invalid expression was provided
     InvalidExpression,
+    /// An invalid identifier was encountered
+    InvalidIdentifier,
     /// An invalid token was encountered
     InvalidToken,
     /// An invalid following expression was encountered
@@ -114,6 +119,11 @@ pub enum Token {
 #[inline]
 pub(crate) fn parse_invalid_expr<E: Into<Source>>(e: E) -> Error {
     Error::new(Kind::Parse(Parse::InvalidExpression)).with(e)
+}
+
+#[inline]
+pub(crate) fn parse_invalid_ident<E: Into<Source>>(e: E) -> Error {
+    Error::new(Kind::Parse(Parse::InvalidIdentifier)).with(e)
 }
 
 #[inline]

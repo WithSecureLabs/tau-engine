@@ -1,19 +1,54 @@
 use std::iter::Iterator;
 use std::iter::Peekable;
 
+use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
+use regex::Regex;
+use serde_yaml::{Mapping, Value as Yaml};
 use tracing::debug;
 
-use crate::tokeniser::{BoolSym, DelSym, MiscSym, SearchSym, Token};
+use crate::identifier::{Identifier, IdentifierParser};
+use crate::tokeniser::{BoolSym, DelSym, MiscSym, Token};
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum MatchType {
+    Contains(String),
+    EndsWith(String),
+    Exact(String),
+    StartsWith(String),
+}
+
+#[derive(Clone, Debug)]
+pub enum Search {
+    AhoCorasick(Box<AhoCorasick>, Vec<MatchType>),
+    Contains(String),
+    EndsWith(String),
+    Exact(String),
+    Regex(Regex),
+    StartsWith(String),
+}
+impl PartialEq for Search {
+    fn eq(&self, other: &Search) -> bool {
+        match (self, other) {
+            (Search::AhoCorasick(_, m0), Search::AhoCorasick(_, m1)) => m0 == m1,
+            (Search::Contains(s0), Search::Contains(s1)) => s0 == s1,
+            (Search::EndsWith(s0), Search::EndsWith(s1)) => s0 == s1,
+            (Search::Exact(s0), Search::Exact(s1)) => s0 == s1,
+            (Search::Regex(r0), Search::Regex(r1)) => r0.as_str() == r1.as_str(),
+            (Search::StartsWith(s0), Search::StartsWith(s1)) => s0 == s1,
+            (_, _) => false,
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
     BooleanExpression(Box<Expression>, BoolSym, Box<Expression>),
     Cast(String, MiscSym),
-    Column(String),
+    Field(String),
     Identifier(String),
     Integer(i32),
     Negate(Box<Expression>),
-    Search(SearchSym, String),
+    Search(Search, String),
 }
 
 // Pratt Parser used to parse the token stream
@@ -307,32 +342,266 @@ where
                         }
                     }
                 },
-                Token::Search(ref s) => match *s {
-                    SearchSym::All | SearchSym::Of(_) => {
-                        // XXX: All and Of are not implemented...
-                        // Munch following identifier
-                        match it.next() {
-                            Some(t) => match *t {
-                                Token::Identifier(ref i) => {
-                                    Ok(Expression::Search(s.clone(), i.to_string()))
-                                }
-                                _ => Err(crate::error::parse_invalid_token(format!(
-                                    "NUD encountered - '{:?}'",
-                                    t
-                                ))),
-                            },
-                            None => Err(crate::error::parse_invalid_token("NUD expected token")),
-                        }
-                    }
-                },
-                Token::Operator(_) => Err(crate::error::parse_invalid_token(format!(
-                    "NUD encountered - '{:?}'",
-                    t
-                ))),
+                Token::Operator(_) | Token::Search(_) => Err(crate::error::parse_invalid_token(
+                    format!("NUD encountered - '{:?}'", t),
+                )),
             }
         }
         None => Err(crate::error::parse_invalid_token("NUD expected token")),
     }
+}
+
+// FIXME: We should really be parsing the identifier blocks using the Pratt parser, but tokenising
+// them is hard, so we just cheat for now... :P
+pub fn parse_identifier(yaml: &Yaml) -> crate::Result<Expression> {
+    match yaml {
+        Yaml::Mapping(m) => parse_mapping(m),
+        Yaml::Sequence(s) => {
+            // We allow a sequence of maps only on the root
+            let mut it = s.iter();
+            match it.next() {
+                Some(v) => match &v {
+                    Yaml::Mapping(m) => {
+                        let mut expression = parse_mapping(&m)?;
+                        for value in it {
+                            // NOTE: A sequence can only be one type
+                            if let Yaml::Mapping(mapping) = value {
+                                expression = Expression::BooleanExpression(
+                                    Box::new(expression),
+                                    BoolSym::Or,
+                                    Box::new(parse_mapping(mapping)?),
+                                );
+                            } else {
+                                return Err(crate::error::parse_invalid_ident(format!(
+                                    "expected a sequence of mappings, encountered - {:?}",
+                                    yaml
+                                )));
+                            }
+                        }
+                        Ok(expression)
+                    }
+                    _ => Err(crate::error::parse_invalid_ident(format!(
+                        "expected a sequence of mappings, encountered - {:?}",
+                        yaml
+                    ))),
+                },
+                None => Err(crate::error::parse_invalid_ident(format!(
+                    "expected a non empty sequence of mappings, encountered - {:?}",
+                    yaml
+                ))),
+            }
+        }
+        _ => Err(crate::error::parse_invalid_ident(format!(
+            "expected mapping or sequence, encountered - {:?}",
+            yaml
+        ))),
+    }
+}
+
+fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
+    let mut expression = None;
+    for (k, v) in mapping {
+        let k = match k {
+            Yaml::String(s) => s,
+            _ => {
+                return Err(crate::error::parse_invalid_ident(format!(
+                    "mapping key must be a string, encountered - {:?}",
+                    k
+                )))
+            }
+        };
+        match v {
+            Yaml::String(ref s) => {
+                let search = s.to_owned().into_identifier()?;
+                let expr = match search {
+                    Identifier::Equal(i) => Expression::BooleanExpression(
+                        Box::new(Expression::Field(k.to_owned())),
+                        BoolSym::Equal,
+                        Box::new(Expression::Integer(i)),
+                    ),
+                    Identifier::GreaterThan(i) => Expression::BooleanExpression(
+                        Box::new(Expression::Field(k.to_owned())),
+                        BoolSym::GreaterThan,
+                        Box::new(Expression::Integer(i)),
+                    ),
+                    Identifier::GreaterThanOrEqual(i) => Expression::BooleanExpression(
+                        Box::new(Expression::Field(k.to_owned())),
+                        BoolSym::GreaterThanOrEqual,
+                        Box::new(Expression::Integer(i)),
+                    ),
+                    Identifier::Contains(c) => {
+                        Expression::Search(Search::Contains(c), k.to_owned())
+                    }
+                    Identifier::EndsWith(c) => {
+                        Expression::Search(Search::EndsWith(c), k.to_owned())
+                    }
+                    Identifier::Exact(c) => Expression::Search(Search::Exact(c), k.to_owned()),
+                    Identifier::LessThan(i) => Expression::BooleanExpression(
+                        Box::new(Expression::Field(k.to_owned())),
+                        BoolSym::LessThan,
+                        Box::new(Expression::Integer(i)),
+                    ),
+                    Identifier::LessThanOrEqual(i) => Expression::BooleanExpression(
+                        Box::new(Expression::Field(k.to_owned())),
+                        BoolSym::LessThanOrEqual,
+                        Box::new(Expression::Integer(i)),
+                    ),
+                    Identifier::Regex(c) => Expression::Search(Search::Regex(c), k.to_owned()),
+                    Identifier::StartsWith(c) => {
+                        Expression::Search(Search::StartsWith(c), k.to_owned())
+                    }
+                };
+                match expression {
+                    Some(e) => {
+                        expression = Some(Expression::BooleanExpression(
+                            Box::new(e),
+                            BoolSym::And,
+                            Box::new(expr),
+                        ))
+                    }
+                    None => expression = Some(expr),
+                }
+            }
+            Yaml::Sequence(ref s) => {
+                // Now we need to be as fast as possible it turns out that builtin strings functions are
+                // fastest when we only need to check a single condition, when we need to check more that
+                // one AhoCorasick becomes the quicker, even though AC should be as fast as starts_with and
+                // contains... We also want to order in terms of quickest on average:
+                //
+                //  1. ExactMatch
+                //  2. StartsWith
+                //  3. EndsWith
+                //  4. Contains
+                //  5. AhoCorasick
+                //  6. Regex
+                //
+                //  And for the above use AhoCorasick when list is more than one for 2,3,4
+                let mut exact: Vec<Identifier> = vec![];
+                let mut starts_with: Vec<Identifier> = vec![];
+                let mut ends_with: Vec<Identifier> = vec![];
+                let mut contains: Vec<Identifier> = vec![];
+                let mut regex: Vec<Regex> = vec![];
+                let mut rest: Vec<Expression> = vec![]; // NOTE: Don't care about speed of numbers atm
+                for value in s {
+                    let identifier = match value {
+                        Yaml::String(s) => s.clone().into_identifier()?,
+                        _ => {
+                            return Err(crate::error::parse_invalid_ident(format!(
+                                "value must be string, encountered - {:?}",
+                                k
+                            )))
+                        }
+                    };
+                    match identifier {
+                        Identifier::Exact(_) => exact.push(identifier),
+                        Identifier::StartsWith(_) => starts_with.push(identifier),
+                        Identifier::EndsWith(_) => ends_with.push(identifier),
+                        Identifier::Contains(_) => contains.push(identifier),
+                        Identifier::Regex(r) => regex.push(r),
+                        Identifier::Equal(i) => rest.push(Expression::BooleanExpression(
+                            Box::new(Expression::Field(k.to_owned())),
+                            BoolSym::Equal,
+                            Box::new(Expression::Integer(i)),
+                        )),
+                        Identifier::GreaterThan(i) => rest.push(Expression::BooleanExpression(
+                            Box::new(Expression::Field(k.to_owned())),
+                            BoolSym::GreaterThan,
+                            Box::new(Expression::Integer(i)),
+                        )),
+                        Identifier::GreaterThanOrEqual(i) => {
+                            rest.push(Expression::BooleanExpression(
+                                Box::new(Expression::Field(k.to_owned())),
+                                BoolSym::GreaterThanOrEqual,
+                                Box::new(Expression::Integer(i)),
+                            ))
+                        }
+                        Identifier::LessThan(i) => rest.push(Expression::BooleanExpression(
+                            Box::new(Expression::Field(k.to_owned())),
+                            BoolSym::LessThan,
+                            Box::new(Expression::Integer(i)),
+                        )),
+                        Identifier::LessThanOrEqual(i) => rest.push(Expression::BooleanExpression(
+                            Box::new(Expression::Field(k.to_owned())),
+                            BoolSym::LessThanOrEqual,
+                            Box::new(Expression::Integer(i)),
+                        )),
+                    }
+                }
+                let mut expressions: Vec<Expression> = vec![];
+                let mut needles: Vec<String> = vec![];
+                let mut context: Vec<MatchType> = vec![];
+                for i in starts_with.into_iter() {
+                    if let Identifier::StartsWith(i) = i {
+                        context.push(MatchType::StartsWith(i.to_string()));
+                        needles.push(i);
+                    }
+                }
+                for i in contains.into_iter() {
+                    if let Identifier::Contains(i) = i {
+                        context.push(MatchType::Contains(i.to_string()));
+                        needles.push(i);
+                    }
+                }
+                for i in ends_with.into_iter() {
+                    if let Identifier::EndsWith(i) = i {
+                        context.push(MatchType::EndsWith(i.to_string()));
+                        needles.push(i);
+                    }
+                }
+                for i in exact.into_iter() {
+                    if let Identifier::Exact(i) = i {
+                        // NOTE: Do not allow empty string into the needles as it causes massive slow down,
+                        // don't ask me why I have not looked into it!
+                        if i == "" {
+                            expressions.push(Expression::Search(Search::Exact(i), k.clone()));
+                        } else {
+                            context.push(MatchType::Exact(i.to_string()));
+                            needles.push(i);
+                        }
+                    }
+                }
+                if !needles.is_empty() {
+                    expressions.push(Expression::Search(
+                        Search::AhoCorasick(
+                            Box::new(
+                                AhoCorasickBuilder::new()
+                                    .ascii_case_insensitive(true) // XXX: This should be a setting
+                                    .dfa(true)
+                                    .build(needles),
+                            ),
+                            context,
+                        ),
+                        k.clone(),
+                    ));
+                }
+                expressions.extend(
+                    regex
+                        .into_iter()
+                        .map(|r| Expression::Search(Search::Regex(r), k.to_string())),
+                );
+                expressions.extend(rest);
+                for expr in expressions {
+                    match expression {
+                        Some(e) => {
+                            expression = Some(Expression::BooleanExpression(
+                                Box::new(e),
+                                BoolSym::Or,
+                                Box::new(expr),
+                            ))
+                        }
+                        None => expression = Some(expr),
+                    }
+                }
+            }
+            _ => {
+                return Err(crate::error::parse_invalid_ident(format!(
+                    "expected sequence or string, encountered - {:?}",
+                    v
+                )))
+            }
+        }
+    }
+    expression.ok_or(crate::error::parse_invalid_ident("failed to parse mapping"))
 }
 
 #[cfg(test)]
