@@ -3,7 +3,7 @@ use std::fmt;
 
 use serde::de::{self, Deserializer, MapAccess, Visitor};
 use serde::{Deserialize, Serialize};
-use serde_yaml::Value;
+use serde_yaml::Value as Yaml;
 
 use crate::parser::{self, Expression};
 use crate::tokeniser::Tokeniser;
@@ -18,7 +18,7 @@ pub struct Detection {
     #[serde(rename = "condition")]
     expression_raw: String,
     #[serde(flatten)]
-    identifiers_raw: HashMap<String, Value>,
+    identifiers_raw: HashMap<String, Yaml>,
 }
 
 impl fmt::Debug for Detection {
@@ -46,7 +46,7 @@ impl<'de> Deserialize<'de> for Detection {
                 V: MapAccess<'de>,
             {
                 let mut identifiers: HashMap<String, Expression> = HashMap::new();
-                let mut identifiers_raw: HashMap<String, Value> = HashMap::new();
+                let mut identifiers_raw: HashMap<String, Yaml> = HashMap::new();
                 let mut expression = None;
                 while let Some(key) = map.next_key::<String>()? {
                     match key.as_ref() {
@@ -63,7 +63,7 @@ impl<'de> Deserialize<'de> for Detection {
                                     key
                                 )));
                             }
-                            let v: Value = map.next_value()?;
+                            let v: Yaml = map.next_value()?;
                             identifiers.insert(
                                 key.to_string(),
                                 parser::parse_identifier(&v).map_err(|e| {
@@ -113,50 +113,32 @@ impl<'de> Deserialize<'de> for Detection {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Rule {
     pub detection: Detection,
-    pub true_positives: Vec<Value>,
-    pub true_negatives: Vec<Value>,
+    pub true_positives: Vec<Yaml>,
+    pub true_negatives: Vec<Yaml>,
 }
 
 impl Rule {
     pub fn validate(&self) -> crate::Result<bool> {
-        //let mut errors = vec![];
+        let mut errors = vec![];
         for test in &self.true_positives {
-            //// FIXME: Remove the need for JSON Value...
-            //let s = serde_json::to_string(&test)
-            //    .map_err(|e| crate::Error::new(crate::error::Kind::InvalidJson).with(e))?;
-            //let t: serde_json::Value = serde_json::from_str(&s)
-            //    .map_err(|e| crate::Error::new(crate::error::Kind::InvalidJson).with(e))?;
-            //if !(solver::solve_expression(
-            //    &self.detection.expression,
-            //    &self.detection.identifiers,
-            //    (&t, None),
-            //)?) {
-            //    errors.push(format!(
-            //        "failed to validate true positive check '{:?}'",
-            //        test
-            //    ));
-            //}
+            if !(crate::solver::solve(&self.detection, test.as_mapping().unwrap())) {
+                errors.push(format!(
+                    "failed to validate true positive check '{:?}'",
+                    test
+                ));
+            }
         }
         for test in &self.true_negatives {
-            //// FIXME: Remove the need for JSON Value...
-            //let s = serde_json::to_string(&test)
-            //    .map_err(|e| crate::Error::new(crate::error::Kind::InvalidJson).with(e))?;
-            //let t: serde_json::Value = serde_json::from_str(&s)
-            //    .map_err(|e| crate::Error::new(crate::error::Kind::InvalidJson).with(e))?;
-            //if solver::solve_expression(
-            //    &self.detection.expression,
-            //    &self.detection.identifiers,
-            //    (&t, None),
-            //)? {
-            //    errors.push(format!(
-            //        "failed to validate true negative check '{:?}'",
-            //        test
-            //    ));
-            //}
+            if crate::solver::solve(&self.detection, test.as_mapping().unwrap()) {
+                errors.push(format!(
+                    "failed to validate true negative check '{:?}'",
+                    test
+                ));
+            }
         }
-        //if !errors.is_empty() {
-        //    return Err(crate::Error::new(crate::error::Kind::Validation).with(errors.join(";")));
-        //}
+        if !errors.is_empty() {
+            return Err(crate::Error::new(crate::error::Kind::Validation).with(errors.join(";")));
+        }
         Ok(true)
     }
 }

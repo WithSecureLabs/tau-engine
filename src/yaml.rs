@@ -1,11 +1,10 @@
 use std::borrow::Cow;
 
-use serde_json::map::Map;
-pub use serde_json::{Number, Value as Json};
+pub use serde_yaml::{Mapping, Number, Value as Yaml};
 
 use crate::value::{AsValue, Object, Value};
 
-impl AsValue for Json {
+impl AsValue for Yaml {
     #[inline]
     fn as_value(&self) -> Value<'_> {
         match self {
@@ -23,21 +22,24 @@ impl AsValue for Json {
                 }
             }
             Self::Bool(b) => Value::Bool(*b),
-            Self::Object(o) => Value::Object(o),
-            Self::Array(a) => Value::Array(a),
+            Self::Mapping(o) => Value::Object(o),
+            Self::Sequence(s) => Value::Array(s),
         }
     }
 }
 
-impl Object for Map<String, Json> {
+impl Object for Mapping {
     #[inline]
     fn get(&self, key: &str) -> Option<Value<'_>> {
-        self.get(key).map(|v| v.as_value())
+        self.get(&Yaml::String(key.to_string()))
+            .map(|v| v.as_value())
     }
 
     #[inline]
     fn keys(&self) -> Vec<Cow<'_, str>> {
-        self.keys().map(|k| Cow::Borrowed(k.as_str())).collect()
+        self.iter()
+            .filter_map(|(k, _)| k.as_value().to_string().map(|s| Cow::Owned(s)))
+            .collect()
     }
 
     #[inline]

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::convert::TryFrom;
 
 use tracing::debug;
 
@@ -6,6 +7,7 @@ use crate::document::Document;
 use crate::parser::{Expression, MatchType, Search};
 use crate::rule::Detection;
 use crate::tokeniser::{BoolSym, MiscSym};
+use crate::value::Value;
 
 #[derive(Debug, PartialEq)]
 enum SolverResult {
@@ -15,6 +17,8 @@ enum SolverResult {
 }
 
 pub fn solve(detection: &Detection, document: &dyn Document) -> bool {
+    debug!("{:?}", detection.expression);
+    debug!("{:?}", detection.identifiers);
     match solve_expression(&detection.expression, &detection.identifiers, document) {
         SolverResult::True => true,
         SolverResult::False | SolverResult::Missing => false,
@@ -37,7 +41,7 @@ fn solve_expression(
                 | BoolSym::LessThanOrEqual => {
                     let x = match left.as_ref() {
                         Expression::Field(f) => {
-                            match document.get_value(f).and_then(|x| x.as_i64()) {
+                            match document.get_value(f).and_then(|x| x.to_i64()) {
                                 Some(v) => v,
                                 None => {
                                     debug!("evaluating false (no i64 left) for {:?}", expression);
@@ -51,8 +55,8 @@ fn solve_expression(
                                     Ok(i) => i,
                                     Err(e) => {
                                         debug!(
-                                            "could not cast left hand side for {:?}",
-                                            expression
+                                            "could not cast left hand side for {:?} - {}",
+                                            expression, e
                                         );
                                         return SolverResult::False;
                                     }
@@ -71,7 +75,7 @@ fn solve_expression(
                     };
                     let y = match right.as_ref() {
                         Expression::Field(f) => {
-                            match document.get_value(f).and_then(|x| x.as_i64()) {
+                            match document.get_value(f).and_then(|x| x.to_i64()) {
                                 Some(v) => v,
                                 None => {
                                     debug!("evaluating false (no i64 left) for {:?}", expression);
@@ -85,8 +89,8 @@ fn solve_expression(
                                     Ok(i) => i,
                                     Err(e) => {
                                         debug!(
-                                            "could not cast left hand side for {:?}",
-                                            expression
+                                            "could not cast left hand side for {:?} - {}",
+                                            expression, e
                                         );
                                         return SolverResult::False;
                                     }
@@ -119,8 +123,8 @@ fn solve_expression(
                 BoolSym::And => {
                     let x = match solve_expression(&*left, identifiers, document) {
                         SolverResult::True => (true, false),
-                        SolverResult::False => (false, false),
-                        SolverResult::Missing => (false, true),
+                        SolverResult::False => return SolverResult::False,
+                        SolverResult::Missing => return SolverResult::Missing,
                     };
                     let y = match solve_expression(&*right, identifiers, document) {
                         SolverResult::True => (true, false),
@@ -143,7 +147,7 @@ fn solve_expression(
                 }
                 BoolSym::Or => {
                     let x = match solve_expression(&*left, identifiers, document) {
-                        SolverResult::True => (true, false),
+                        SolverResult::True => return SolverResult::True,
                         SolverResult::False => (false, false),
                         SolverResult::Missing => (false, true),
                     };
@@ -181,6 +185,36 @@ fn solve_expression(
             debug!("evaluating {:?} for {:?}", res, expression);
             res
         }
+        Expression::Nested(ref s, ref e) => {
+            let value = match document.get_value(s) {
+                Some(v) => v,
+                None => {
+                    debug!("evaluating missing, field not found for {:?}", expression);
+                    return SolverResult::Missing;
+                }
+            };
+            match value {
+                Value::Object(o) => solve_expression(e, identifiers, &o),
+                Value::Array(a) => {
+                    for v in a.iter() {
+                        if let Some(x) = v.as_object() {
+                            match solve_expression(e, identifiers, &x) {
+                                SolverResult::True => return SolverResult::True,
+                                _ => {}
+                            }
+                        }
+                    }
+                    SolverResult::False
+                }
+                _ => {
+                    debug!(
+                        "evaluating false, field is not an array of objects or object for {:?}",
+                        expression
+                    );
+                    SolverResult::False
+                }
+            }
+        }
         Expression::Search(ref s, ref f) => {
             let value = match document.get_value(f) {
                 Some(v) => v,
@@ -189,72 +223,91 @@ fn solve_expression(
                     return SolverResult::Missing;
                 }
             };
-            let value = match value.as_str() {
-                Some(v) => v,
-                None => {
+            let res = match value {
+                Value::String(ref x) => search(s, x),
+                Value::Array(a) => {
+                    let mut res = SolverResult::False;
+                    for v in a.iter() {
+                        if let Some(x) = v.as_str() {
+                            match search(s, x) {
+                                SolverResult::True => {
+                                    res = SolverResult::True;
+                                    break;
+                                }
+                                _ => {}
+                            };
+                        }
+                    }
+                    res
+                }
+                _ => {
                     debug!(
-                        "evaluating false, field is not a string for {:?}",
+                        "evaluating false, field is not an array of strings, or a string for {:?}",
                         expression
                     );
                     return SolverResult::Missing;
                 }
             };
-            let res = match s {
-                Search::Exact(ref i) => {
-                    if i == value {
-                        return SolverResult::True;
-                    }
-                }
-                Search::Contains(ref i) => {
-                    if value.contains(i) {
-                        return SolverResult::True;
-                    }
-                }
-                Search::EndsWith(ref i) => {
-                    if value.ends_with(i) {
-                        return SolverResult::True;
-                    }
-                }
-                Search::StartsWith(ref i) => {
-                    if value.starts_with(i) {
-                        return SolverResult::True;
-                    }
-                }
-                Search::Regex(ref i) => {
-                    if i.is_match(value) {
-                        return SolverResult::True;
-                    }
-                }
-                Search::AhoCorasick(ref a, ref m) => {
-                    for i in a.find_overlapping_iter(value) {
-                        match m[i.pattern()] {
-                            MatchType::Contains(_) => return SolverResult::True,
-                            MatchType::EndsWith(_) => {
-                                if i.end() == value.len() {
-                                    return SolverResult::True;
-                                }
-                            }
-                            MatchType::Exact(_) => {
-                                if i.start() == 0 && i.end() == value.len() {
-                                    return SolverResult::True;
-                                }
-                            }
-                            MatchType::StartsWith(_) => {
-                                if i.start() == 0 {
-                                    return SolverResult::True;
-                                }
-                            }
-                        }
-                    }
-                    return SolverResult::False;
-                }
-            };
-            SolverResult::False
-            //debug!("evaluating {:?} for {:?}", res, expression);
-            //res
+            debug!("evaluating {:?} for {:?}", res, expression);
+            res
         }
         Expression::Cast(_, _) | Expression::Field(_) | Expression::Integer(_) => unreachable!(),
     }
+}
+
+#[inline]
+fn search(kind: &Search, value: &str) -> SolverResult {
+    match kind {
+        Search::Exact(ref i) => {
+            if i == value {
+                return SolverResult::True;
+            }
+        }
+        Search::Contains(ref i) => {
+            if value.contains(i) {
+                return SolverResult::True;
+            }
+        }
+        Search::EndsWith(ref i) => {
+            if value.ends_with(i) {
+                return SolverResult::True;
+            }
+        }
+        Search::StartsWith(ref i) => {
+            if value.starts_with(i) {
+                return SolverResult::True;
+            }
+        }
+        Search::Regex(ref i) => {
+            if i.is_match(value) {
+                return SolverResult::True;
+            }
+        }
+        Search::AhoCorasick(ref a, ref m) => {
+            for i in a.find_overlapping_iter(value) {
+                match m[i.pattern()] {
+                    MatchType::Contains(_) => return SolverResult::True,
+                    MatchType::EndsWith(_) => {
+                        if i.end() == value.len() {
+                            return SolverResult::True;
+                        }
+                    }
+                    MatchType::Exact(_) => {
+                        if i.start() == 0 && i.end() == value.len() {
+                            return SolverResult::True;
+                        }
+                    }
+                    MatchType::StartsWith(_) => {
+                        if i.start() == 0 {
+                            return SolverResult::True;
+                        }
+                    }
+                }
+            }
+            return SolverResult::False;
+        }
+    }
+    SolverResult::False
 }
 
 #[cfg(test)]

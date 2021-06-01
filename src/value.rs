@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
+#[derive(Clone)]
 pub enum Value<'a> {
     Null,
     Bool(bool),
@@ -142,6 +143,21 @@ impl<'a> Value<'a> {
     }
 
     #[inline]
+    pub fn to_i64(&self) -> Option<i64> {
+        match self {
+            Self::Int(n) => Some(*n),
+            Self::UInt(n) => {
+                if *n <= i64::MAX as u64 {
+                    Some(*n as i64)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    #[inline]
     pub fn to_string(&self) -> Option<String> {
         match self {
             Self::Bool(b) => Some(b.to_string()),
@@ -155,54 +171,34 @@ impl<'a> Value<'a> {
 }
 
 pub trait AsValue {
-    fn as_value_ref(&self) -> Value<'_>;
+    fn as_value(&self) -> Value<'_>;
 }
 
 impl AsValue for () {
     #[inline]
-    fn as_value_ref(&self) -> Value<'_> {
+    fn as_value(&self) -> Value<'_> {
         Value::Null
     }
 }
 
 impl AsValue for bool {
     #[inline]
-    fn as_value_ref(&self) -> Value<'_> {
+    fn as_value(&self) -> Value<'_> {
         Value::Bool(*self)
     }
 }
 
 impl AsValue for str {
     #[inline]
-    fn as_value_ref(&self) -> Value<'_> {
+    fn as_value(&self) -> Value<'_> {
         Value::String(Cow::Borrowed(self))
     }
 }
 
 impl AsValue for String {
     #[inline]
-    fn as_value_ref(&self) -> Value<'_> {
+    fn as_value(&self) -> Value<'_> {
         Value::String(Cow::Borrowed(self))
-    }
-}
-
-impl<V> AsValue for Box<V>
-where
-    V: AsValue,
-{
-    #[inline]
-    fn as_value_ref(&self) -> Value<'_> {
-        self.as_ref().as_value_ref()
-    }
-}
-
-impl<V> AsValue for HashMap<String, V>
-where
-    V: AsValue,
-{
-    #[inline]
-    fn as_value_ref(&self) -> Value<'_> {
-        Value::Object(self)
     }
 }
 
@@ -211,7 +207,7 @@ where
     V: AsValue,
 {
     #[inline]
-    fn as_value_ref(&self) -> Value<'_> {
+    fn as_value(&self) -> Value<'_> {
         Value::Array(self)
     }
 }
@@ -221,10 +217,8 @@ where
     V: AsValue,
 {
     #[inline]
-    fn as_value_ref(&self) -> Value<'_> {
-        self.as_ref()
-            .map(|v| v.as_value_ref())
-            .unwrap_or(Value::Null)
+    fn as_value(&self) -> Value<'_> {
+        self.as_ref().map(|v| v.as_value()).unwrap_or(Value::Null)
     }
 }
 
@@ -233,58 +227,58 @@ where
     V: AsValue,
 {
     #[inline]
-    fn as_value_ref(&self) -> Value<'_> {
+    fn as_value(&self) -> Value<'_> {
         Value::Array(self)
     }
 }
 
-macro_rules! impl_as_value_ref_float {
+macro_rules! impl_as_value_float {
     ($ty:ty) => {
         impl AsValue for $ty {
             #[inline]
-            fn as_value_ref(&self) -> Value<'_> {
+            fn as_value(&self) -> Value<'_> {
                 Value::Float(*self as f64)
             }
         }
     };
 }
 
-impl_as_value_ref_float!(f32);
-impl_as_value_ref_float!(f64);
+impl_as_value_float!(f32);
+impl_as_value_float!(f64);
 
-macro_rules! impl_as_value_ref_int {
+macro_rules! impl_as_value_int {
     ($ty:ty) => {
         impl AsValue for $ty {
             #[inline]
-            fn as_value_ref(&self) -> Value<'_> {
+            fn as_value(&self) -> Value<'_> {
                 Value::Int(*self as i64)
             }
         }
     };
 }
 
-impl_as_value_ref_int!(i8);
-impl_as_value_ref_int!(i16);
-impl_as_value_ref_int!(i32);
-impl_as_value_ref_int!(i64);
-impl_as_value_ref_int!(isize);
+impl_as_value_int!(i8);
+impl_as_value_int!(i16);
+impl_as_value_int!(i32);
+impl_as_value_int!(i64);
+impl_as_value_int!(isize);
 
-macro_rules! impl_as_value_ref_uint {
+macro_rules! impl_as_value_uint {
     ($ty:ty) => {
         impl AsValue for $ty {
             #[inline]
-            fn as_value_ref(&self) -> Value<'_> {
+            fn as_value(&self) -> Value<'_> {
                 Value::UInt(*self as u64)
             }
         }
     };
 }
 
-impl_as_value_ref_uint!(u8);
-impl_as_value_ref_uint!(u16);
-impl_as_value_ref_uint!(u32);
-impl_as_value_ref_uint!(u64);
-impl_as_value_ref_uint!(usize);
+impl_as_value_uint!(u8);
+impl_as_value_uint!(u16);
+impl_as_value_uint!(u32);
+impl_as_value_uint!(u64);
+impl_as_value_uint!(usize);
 
 pub trait Array {
     fn iter(&self) -> Box<dyn Iterator<Item = Value<'_>> + '_>;
@@ -297,7 +291,7 @@ where
 {
     #[inline]
     fn iter(&self) -> Box<dyn Iterator<Item = Value<'_>> + '_> {
-        Box::new(self.iter().map(|v| v.as_value_ref()))
+        Box::new(self.iter().map(|v| v.as_value()))
     }
 
     #[inline]
@@ -312,7 +306,7 @@ where
 {
     #[inline]
     fn iter(&self) -> Box<dyn Iterator<Item = Value<'_>> + '_> {
-        Box::new(self.as_slice().iter().map(|v| v.as_value_ref()))
+        Box::new(self.as_slice().iter().map(|v| v.as_value()))
     }
 
     #[inline]
@@ -322,8 +316,26 @@ where
 }
 
 pub trait Object {
+    fn find(&self, key: &str) -> Option<Value<'_>> {
+        let mut v: Option<Value<'_>> = None;
+        for k in key.split('.') {
+            match v {
+                Some(value) => match value {
+                    Value::Object(value) => v = value.get(k),
+                    _ => return None,
+                },
+                None => {
+                    v = match <Self as Object>::get(self, k) {
+                        Some(v) => Some(v),
+                        None => return None,
+                    }
+                }
+            }
+        }
+        return v;
+    }
     fn get(&self, key: &str) -> Option<Value<'_>>;
-    fn keys(&self) -> Vec<&str>;
+    fn keys(&self) -> Vec<Cow<'_, str>>;
     fn len(&self) -> usize;
 }
 
@@ -333,16 +345,23 @@ where
 {
     #[inline]
     fn get(&self, key: &str) -> Option<Value<'_>> {
-        self.get(key).map(|v| v.as_value_ref())
+        self.get(key).map(|v| v.as_value())
     }
 
     #[inline]
-    fn keys(&self) -> Vec<&str> {
-        self.keys().map(|k| k.as_str()).collect()
+    fn keys(&self) -> Vec<Cow<'_, str>> {
+        self.keys().map(|s| Cow::Borrowed(s.as_str())).collect()
     }
 
     #[inline]
     fn len(&self) -> usize {
         self.len()
+    }
+}
+
+impl<O: Object> AsValue for O {
+    #[inline]
+    fn as_value(&self) -> Value<'_> {
+        Value::Object(self)
     }
 }

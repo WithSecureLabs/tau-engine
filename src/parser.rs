@@ -48,6 +48,7 @@ pub enum Expression {
     Identifier(String),
     Integer(i64),
     Negate(Box<Expression>),
+    Nested(String, Box<Expression>),
     Search(Search, String),
 }
 
@@ -534,9 +535,13 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                 for value in s {
                     let identifier = match value {
                         Yaml::String(s) => s.clone().into_identifier()?,
+                        Yaml::Mapping(m) => {
+                            rest.push(Expression::Nested(k.clone(), Box::new(parse_mapping(m)?)));
+                            continue;
+                        }
                         _ => {
                             return Err(crate::error::parse_invalid_ident(format!(
-                                "value must be string, encountered - {:?}",
+                                "value must be a mapping or string, encountered - {:?}",
                                 k
                             )))
                         }
@@ -629,12 +634,25 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         .map(|r| Expression::Search(Search::Regex(r), k.to_string())),
                 );
                 expressions.extend(rest);
+                let mut exprs = None;
                 for expr in expressions {
+                    match exprs {
+                        Some(e) => {
+                            exprs = Some(Expression::BooleanExpression(
+                                Box::new(e),
+                                BoolSym::Or,
+                                Box::new(expr),
+                            ))
+                        }
+                        None => exprs = Some(expr),
+                    }
+                }
+                if let Some(expr) = exprs {
                     match expression {
                         Some(e) => {
                             expression = Some(Expression::BooleanExpression(
                                 Box::new(e),
-                                BoolSym::Or,
+                                BoolSym::And,
                                 Box::new(expr),
                             ))
                         }

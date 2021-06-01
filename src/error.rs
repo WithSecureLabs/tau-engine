@@ -67,6 +67,7 @@ impl fmt::Display for Error {
             Kind::Token(Token::InvalidNumber) => {
                 "an invalid number was encountered during tokenisation"
             }
+            Kind::Validation => "failed to validate rule",
         };
         if let Some(ref source) = self.inner.source {
             write!(f, "{}: {}", desc, source)
@@ -89,6 +90,8 @@ pub enum Kind {
     Parse(Parse),
     /// Tokenising Errors
     Token(Token),
+    /// Failed to validate the rule
+    Validation,
 }
 
 /// The `Kind` of `tau_engine::Error` when parsing.
