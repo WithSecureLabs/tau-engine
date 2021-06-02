@@ -1,3 +1,4 @@
+use std::fmt;
 use std::iter::Peekable;
 use std::str::Chars;
 
@@ -13,6 +14,19 @@ pub enum BoolSym {
     LessThanOrEqual,
     Or,
 }
+impl fmt::Display for BoolSym {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::And => write!(f, "&&"),
+            Self::Equal => write!(f, "=="),
+            Self::GreaterThan => write!(f, ">"),
+            Self::GreaterThanOrEqual => write!(f, ">="),
+            Self::LessThan => write!(f, "<"),
+            Self::LessThanOrEqual => write!(f, "<="),
+            Self::Or => write!(f, "||"),
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum DelSym {
@@ -25,6 +39,15 @@ pub enum MiscSym {
     Int,
     Not,
     Str,
+}
+impl fmt::Display for MiscSym {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Int => write!(f, "int"),
+            Self::Not => write!(f, "not"),
+            Self::Str => write!(f, "str"),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

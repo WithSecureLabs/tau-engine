@@ -1,3 +1,4 @@
+use std::fmt;
 use std::iter::Iterator;
 use std::iter::Peekable;
 
@@ -26,6 +27,18 @@ pub enum Search {
     Regex(Regex),
     StartsWith(String),
 }
+impl fmt::Display for Search {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::AhoCorasick(_, t) => write!(f, "aho_corasick({:?})", t),
+            Self::Contains(s) => write!(f, "contains({})", s),
+            Self::EndsWith(s) => write!(f, "ends_with({})", s),
+            Self::Exact(s) => write!(f, "exact({})", s),
+            Self::Regex(s) => write!(f, "regex({})", s),
+            Self::StartsWith(s) => write!(f, "starts_with({})", s),
+        }
+    }
+}
 impl PartialEq for Search {
     fn eq(&self, other: &Search) -> bool {
         match (self, other) {
@@ -51,6 +64,21 @@ pub enum Expression {
     Negate(Box<Expression>),
     Nested(String, Box<Expression>),
     Search(Search, String),
+}
+impl fmt::Display for Expression {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::BooleanExpression(l, o, r) => write!(f, "expression({} {} {})", l, o, r),
+            Self::Boolean(b) => write!(f, "bool({})", b),
+            Self::Cast(s, t) => write!(f, "cast({}({}))", t, s),
+            Self::Field(s) => write!(f, "field({})", s),
+            Self::Identifier(s) => write!(f, "identifier({})", s),
+            Self::Integer(i) => write!(f, "int({})", i),
+            Self::Negate(e) => write!(f, "negate({})", e),
+            Self::Nested(s, e) => write!(f, "nested({}, {})", s, e),
+            Self::Search(e, s) => write!(f, "search({}, {})", s, e),
+        }
+    }
 }
 
 // Pratt Parser used to parse the token stream
@@ -700,13 +728,13 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                 );
                 expressions.extend(rest);
                 let mut exprs = None;
-                for expr in expressions {
+                for expr in expressions.into_iter().rev() {
                     match exprs {
                         Some(e) => {
                             exprs = Some(Expression::BooleanExpression(
-                                Box::new(e),
-                                BoolSym::Or,
                                 Box::new(expr),
+                                BoolSym::Or,
+                                Box::new(e),
                             ))
                         }
                         None => exprs = Some(expr),

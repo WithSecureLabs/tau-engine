@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::convert::TryFrom;
+use std::fmt;
 
 use tracing::debug;
 
@@ -15,10 +15,17 @@ enum SolverResult {
     False,
     Missing,
 }
+impl fmt::Display for SolverResult {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::True => write!(f, "true"),
+            Self::False => write!(f, "false"),
+            Self::Missing => write!(f, "missing"),
+        }
+    }
+}
 
 pub fn solve(detection: &Detection, document: &dyn Document) -> bool {
-    debug!("{:?}", detection.expression);
-    debug!("{:?}", detection.identifiers);
     match solve_expression(&detection.expression, &detection.identifiers, document) {
         SolverResult::True => true,
         SolverResult::False | SolverResult::Missing => false,
@@ -42,7 +49,7 @@ fn solve_expression(
                     let x = match document.get_value(left) {
                         Some(x) => x,
                         None => {
-                            debug!("evaluating missing, no left hand side for {:?}", expression);
+                            debug!("evaluating missing, no left hand side for {}", expression);
                             return SolverResult::Missing;
                         }
                     };
@@ -50,7 +57,7 @@ fn solve_expression(
                         Some(v) => v,
                         None => {
                             debug!(
-                                "evaluating false, could not cast left field to string for {:?}",
+                                "evaluating false, could not cast left field to string for {}",
                                 expression
                             );
                             return SolverResult::False;
@@ -59,10 +66,7 @@ fn solve_expression(
                     let y = match document.get_value(right) {
                         Some(x) => x,
                         None => {
-                            debug!(
-                                "evaluating missing, no right hand side for {:?}",
-                                expression
-                            );
+                            debug!("evaluating missing, no right hand side for {}", expression);
                             return SolverResult::Missing;
                         }
                     };
@@ -70,7 +74,7 @@ fn solve_expression(
                         Some(v) => v,
                         None => {
                             debug!(
-                                "evaluating false, could not cast right field to string for {:?}",
+                                "evaluating false, could not cast right field to string for {}",
                                 expression
                             );
                             return SolverResult::False;
@@ -86,7 +90,7 @@ fn solve_expression(
                     let x = match document.get_value(left) {
                         Some(x) => x,
                         None => {
-                            debug!("evaluating missing, no left hand side for {:?}", expression);
+                            debug!("evaluating missing, no left hand side for {}", expression);
                             return SolverResult::Missing;
                         }
                     };
@@ -94,7 +98,7 @@ fn solve_expression(
                         Some(v) => v,
                         None => {
                             debug!(
-                                "evaluating false, could not cast left field to boolean for {:?}",
+                                "evaluating false, could not cast left field to boolean for {}",
                                 expression
                             );
                             return SolverResult::False;
@@ -121,7 +125,7 @@ fn solve_expression(
                                 Some(i) => i,
                                 None => {
                                     debug!(
-                                        "evaluating missing, no left hand side for {:?}",
+                                        "evaluating missing, no left hand side for {}",
                                         expression
                                     );
                                     return SolverResult::Missing;
@@ -131,7 +135,7 @@ fn solve_expression(
                                 Some(v) => v,
                                 None => {
                                     debug!(
-                                        "evaluating false, no left hand side for {:?}",
+                                        "evaluating false, no left hand side for {}",
                                         expression
                                     );
                                     return SolverResult::False;
@@ -143,7 +147,7 @@ fn solve_expression(
                                 Some(i) => i,
                                 None => {
                                     debug!(
-                                        "evaluating missing, no left hand side for {:?}",
+                                        "evaluating missing, no left hand side for {}",
                                         expression
                                     );
                                     return SolverResult::Missing;
@@ -154,7 +158,7 @@ fn solve_expression(
                                     Ok(i) => i,
                                     Err(e) => {
                                         debug!(
-                                            "evaluating false, could not cast left hand side for {:?} - {}",
+                                            "evaluating false, could not cast left hand side for {} - {}",
                                             expression, e
                                         );
                                         return SolverResult::False;
@@ -162,7 +166,7 @@ fn solve_expression(
                                 },
                                 None => {
                                     debug!(
-                                        "evaluating false, invalid type on left hand side for {:?}",
+                                        "evaluating false, invalid type on left hand side for {}",
                                         expression
                                     );
                                     return SolverResult::False;
@@ -171,7 +175,7 @@ fn solve_expression(
                         }
                         Expression::Integer(i) => *i,
                         _ => {
-                            debug!("encountered invalid left hand side for {:?}", expression);
+                            debug!("encountered invalid left hand side for {}", expression);
                             return SolverResult::False;
                         }
                     };
@@ -181,7 +185,7 @@ fn solve_expression(
                                 Some(i) => i,
                                 None => {
                                     debug!(
-                                        "evaluating missing, no right hand side for {:?}",
+                                        "evaluating missing, no right hand side for {}",
                                         expression
                                     );
                                     return SolverResult::Missing;
@@ -191,7 +195,7 @@ fn solve_expression(
                                 Some(v) => v,
                                 None => {
                                     debug!(
-                                        "evaluating false, no right hand side for {:?}",
+                                        "evaluating false, no right hand side for {}",
                                         expression
                                     );
                                     return SolverResult::False;
@@ -203,7 +207,7 @@ fn solve_expression(
                                 Some(i) => i,
                                 None => {
                                     debug!(
-                                        "evaluating missing, no right hand side for {:?}",
+                                        "evaluating missing, no right hand side for {}",
                                         expression
                                     );
                                     return SolverResult::Missing;
@@ -214,7 +218,7 @@ fn solve_expression(
                                     Ok(i) => i,
                                     Err(e) => {
                                         debug!(
-                                            "evaluating false, could not cast right hand side for {:?} - {}",
+                                            "evaluating false, could not cast right hand side for {} - {}",
                                             expression, e
                                         );
                                         return SolverResult::False;
@@ -222,7 +226,7 @@ fn solve_expression(
                                 },
                                 None => {
                                     debug!(
-                                        "evaluating false, invalid type on right hand side for {:?}",
+                                        "evaluating false, invalid type on right hand side for {}",
                                         expression
                                     );
                                     return SolverResult::False;
@@ -231,7 +235,7 @@ fn solve_expression(
                         }
                         Expression::Integer(i) => *i,
                         _ => {
-                            debug!("encountered invalid right hand side for {:?}", expression);
+                            debug!("encountered invalid right hand side for {}", expression);
                             return SolverResult::False;
                         }
                     };
@@ -260,7 +264,7 @@ fn solve_expression(
                         SolverResult::Missing => (false, true),
                     };
                     debug!(
-                        "evaluating {} ({}) for {:?}",
+                        "evaluating {} ({}) for {}",
                         x.0 && y.0,
                         x.1 || y.1,
                         expression
@@ -285,7 +289,7 @@ fn solve_expression(
                         SolverResult::Missing => (false, true),
                     };
                     debug!(
-                        "evaluating {} ({}) for {:?}",
+                        "evaluating {} ({}) for {}",
                         x.0 || y.0,
                         x.1 || y.1,
                         expression
@@ -310,14 +314,14 @@ fn solve_expression(
                 SolverResult::False => SolverResult::True,
                 SolverResult::Missing => SolverResult::False,
             };
-            debug!("evaluating {:?} for {:?}", res, expression);
+            debug!("evaluating {} for {}", res, expression);
             res
         }
         Expression::Nested(ref s, ref e) => {
             let value = match document.get_value(s) {
                 Some(v) => v,
                 None => {
-                    debug!("evaluating missing, field not found for {:?}", expression);
+                    debug!("evaluating missing, field not found for {}", expression);
                     return SolverResult::Missing;
                 }
             };
@@ -336,7 +340,7 @@ fn solve_expression(
                 }
                 _ => {
                     debug!(
-                        "evaluating false, field is not an array of objects or object for {:?}",
+                        "evaluating false, field is not an array of objects or object for {}",
                         expression
                     );
                     SolverResult::False
@@ -347,7 +351,7 @@ fn solve_expression(
             let value = match document.get_value(f) {
                 Some(v) => v,
                 None => {
-                    debug!("evaluating missing, field not found for {:?}", expression);
+                    debug!("evaluating missing, field not found for {}", expression);
                     return SolverResult::Missing;
                 }
             };
@@ -370,13 +374,13 @@ fn solve_expression(
                 }
                 _ => {
                     debug!(
-                        "evaluating false, field is not an array of strings, or a string for {:?}",
+                        "evaluating false, field is not an array of strings, or a string for {}",
                         expression
                     );
                     return SolverResult::Missing;
                 }
             };
-            debug!("evaluating {:?} for {:?}", res, expression);
+            debug!("evaluating {} for {}", res, expression);
             res
         }
         Expression::Boolean(_)
