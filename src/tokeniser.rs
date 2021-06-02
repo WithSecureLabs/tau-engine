@@ -100,6 +100,10 @@ impl Tokeniser for String {
                     if match_ahead(&mut it, "int") {
                         tokens.push(Token::Miscellaneous(MiscSym::Int));
                         it.nth(2);
+                    } else if match_ahead(&mut it, "string") {
+                        // NOTE: Deprecated
+                        tokens.push(Token::Miscellaneous(MiscSym::Str));
+                        it.nth(5);
                     } else if match_ahead(&mut it, "str") {
                         tokens.push(Token::Miscellaneous(MiscSym::Str));
                         it.nth(2);

@@ -43,6 +43,7 @@ impl PartialEq for Search {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
     BooleanExpression(Box<Expression>, BoolSym, Box<Expression>),
+    Boolean(bool),
     Cast(String, MiscSym),
     Field(String),
     Identifier(String),
@@ -401,6 +402,7 @@ pub fn parse_identifier(yaml: &Yaml) -> crate::Result<Expression> {
 
 fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
     let mut expression = None;
+    // TODO: Clean
     for (k, v) in mapping {
         let k = match k {
             Yaml::String(s) => s,
@@ -412,6 +414,47 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
             }
         };
         match v {
+            Yaml::Bool(b) => {
+                let expr = Expression::BooleanExpression(
+                    Box::new(Expression::Field(k.to_owned())),
+                    BoolSym::Equal,
+                    Box::new(Expression::Boolean(*b)),
+                );
+                match expression {
+                    Some(e) => {
+                        expression = Some(Expression::BooleanExpression(
+                            Box::new(e),
+                            BoolSym::And,
+                            Box::new(expr),
+                        ))
+                    }
+                    None => expression = Some(expr),
+                }
+            }
+            Yaml::Number(n) => {
+                if let Some(i) = n.as_i64() {
+                    let expr = Expression::BooleanExpression(
+                        Box::new(Expression::Field(k.to_owned())),
+                        BoolSym::Equal,
+                        Box::new(Expression::Integer(i)),
+                    );
+                    match expression {
+                        Some(e) => {
+                            expression = Some(Expression::BooleanExpression(
+                                Box::new(e),
+                                BoolSym::And,
+                                Box::new(expr),
+                            ))
+                        }
+                        None => expression = Some(expr),
+                    }
+                    continue;
+                }
+                return Err(crate::error::parse_invalid_ident(format!(
+                    "number must be a signed integer, encountered - {:?}",
+                    k
+                )));
+            }
             Yaml::String(ref s) => {
                 let search = s.to_owned().into_identifier()?;
                 let expr = match search {
@@ -534,6 +577,28 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                 let mut rest: Vec<Expression> = vec![]; // NOTE: Don't care about speed of numbers atm
                 for value in s {
                     let identifier = match value {
+                        Yaml::Bool(b) => {
+                            rest.push(Expression::BooleanExpression(
+                                Box::new(Expression::Field(k.to_owned())),
+                                BoolSym::Equal,
+                                Box::new(Expression::Boolean(*b)),
+                            ));
+                            continue;
+                        }
+                        Yaml::Number(n) => {
+                            if let Some(i) = n.as_i64() {
+                                rest.push(Expression::BooleanExpression(
+                                    Box::new(Expression::Field(k.to_owned())),
+                                    BoolSym::Equal,
+                                    Box::new(Expression::Integer(i)),
+                                ));
+                                continue;
+                            }
+                            return Err(crate::error::parse_invalid_ident(format!(
+                                "number must be a signed integer, encountered - {:?}",
+                                k
+                            )));
+                        }
                         Yaml::String(s) => s.clone().into_identifier()?,
                         Yaml::Mapping(m) => {
                             rest.push(Expression::Nested(k.clone(), Box::new(parse_mapping(m)?)));

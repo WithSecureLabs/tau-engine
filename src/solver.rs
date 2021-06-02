@@ -32,7 +32,83 @@ fn solve_expression(
 ) -> SolverResult {
     match *expression {
         Expression::BooleanExpression(ref left, ref op, ref right) => {
-            //
+            // Edge cases
+            match (&**left, op, &**right) {
+                (
+                    Expression::Cast(ref left, MiscSym::Str),
+                    BoolSym::Equal,
+                    Expression::Cast(ref right, MiscSym::Str),
+                ) => {
+                    let x = match document.get_value(left) {
+                        Some(x) => x,
+                        None => {
+                            debug!("evaluating missing, no left hand side for {:?}", expression);
+                            return SolverResult::Missing;
+                        }
+                    };
+                    let x = match x.to_string() {
+                        Some(v) => v,
+                        None => {
+                            debug!(
+                                "evaluating false, could not cast left field to string for {:?}",
+                                expression
+                            );
+                            return SolverResult::False;
+                        }
+                    };
+                    let y = match document.get_value(right) {
+                        Some(x) => x,
+                        None => {
+                            debug!(
+                                "evaluating missing, no right hand side for {:?}",
+                                expression
+                            );
+                            return SolverResult::Missing;
+                        }
+                    };
+                    let y = match y.to_string() {
+                        Some(v) => v,
+                        None => {
+                            debug!(
+                                "evaluating false, could not cast right field to string for {:?}",
+                                expression
+                            );
+                            return SolverResult::False;
+                        }
+                    };
+                    if x == y {
+                        return SolverResult::True;
+                    } else {
+                        return SolverResult::False;
+                    }
+                }
+                (Expression::Field(ref left), BoolSym::Equal, Expression::Boolean(b)) => {
+                    let x = match document.get_value(left) {
+                        Some(x) => x,
+                        None => {
+                            debug!("evaluating missing, no left hand side for {:?}", expression);
+                            return SolverResult::Missing;
+                        }
+                    };
+                    let x = match x.as_bool() {
+                        Some(v) => v,
+                        None => {
+                            debug!(
+                                "evaluating false, could not cast left field to boolean for {:?}",
+                                expression
+                            );
+                            return SolverResult::False;
+                        }
+                    };
+                    if x == *b {
+                        return SolverResult::True;
+                    } else {
+                        return SolverResult::False;
+                    }
+                }
+                _ => {}
+            }
+            // Boolean expressions
             match *op {
                 BoolSym::Equal
                 | BoolSym::GreaterThan
@@ -41,28 +117,54 @@ fn solve_expression(
                 | BoolSym::LessThanOrEqual => {
                     let x = match left.as_ref() {
                         Expression::Field(f) => {
-                            match document.get_value(f).and_then(|x| x.to_i64()) {
+                            let i = match document.get_value(f) {
+                                Some(i) => i,
+                                None => {
+                                    debug!(
+                                        "evaluating missing, no left hand side for {:?}",
+                                        expression
+                                    );
+                                    return SolverResult::Missing;
+                                }
+                            };
+                            match i.to_i64() {
                                 Some(v) => v,
                                 None => {
-                                    debug!("evaluating false (no i64 left) for {:?}", expression);
+                                    debug!(
+                                        "evaluating false, no left hand side for {:?}",
+                                        expression
+                                    );
                                     return SolverResult::False;
                                 }
                             }
                         }
                         Expression::Cast(c, MiscSym::Int) => {
-                            match document.get_value(c).and_then(|x| x.to_string()) {
+                            let i = match document.get_value(c) {
+                                Some(i) => i,
+                                None => {
+                                    debug!(
+                                        "evaluating missing, no left hand side for {:?}",
+                                        expression
+                                    );
+                                    return SolverResult::Missing;
+                                }
+                            };
+                            match i.to_string() {
                                 Some(v) => match v.parse::<i64>() {
                                     Ok(i) => i,
                                     Err(e) => {
                                         debug!(
-                                            "could not cast left hand side for {:?} - {}",
+                                            "evaluating false, could not cast left hand side for {:?} - {}",
                                             expression, e
                                         );
                                         return SolverResult::False;
                                     }
                                 },
                                 None => {
-                                    debug!("evaluating false (no i64 left) for {:?}", expression);
+                                    debug!(
+                                        "evaluating false, invalid type on left hand side for {:?}",
+                                        expression
+                                    );
                                     return SolverResult::False;
                                 }
                             }
@@ -75,35 +177,61 @@ fn solve_expression(
                     };
                     let y = match right.as_ref() {
                         Expression::Field(f) => {
-                            match document.get_value(f).and_then(|x| x.to_i64()) {
+                            let i = match document.get_value(f) {
+                                Some(i) => i,
+                                None => {
+                                    debug!(
+                                        "evaluating missing, no right hand side for {:?}",
+                                        expression
+                                    );
+                                    return SolverResult::Missing;
+                                }
+                            };
+                            match i.to_i64() {
                                 Some(v) => v,
                                 None => {
-                                    debug!("evaluating false (no i64 left) for {:?}", expression);
+                                    debug!(
+                                        "evaluating false, no right hand side for {:?}",
+                                        expression
+                                    );
                                     return SolverResult::False;
                                 }
                             }
                         }
                         Expression::Cast(c, MiscSym::Int) => {
-                            match document.get_value(c).and_then(|x| x.to_string()) {
+                            let i = match document.get_value(c) {
+                                Some(i) => i,
+                                None => {
+                                    debug!(
+                                        "evaluating missing, no right hand side for {:?}",
+                                        expression
+                                    );
+                                    return SolverResult::Missing;
+                                }
+                            };
+                            match i.to_string() {
                                 Some(v) => match v.parse::<i64>() {
                                     Ok(i) => i,
                                     Err(e) => {
                                         debug!(
-                                            "could not cast left hand side for {:?} - {}",
+                                            "evaluating false, could not cast right hand side for {:?} - {}",
                                             expression, e
                                         );
                                         return SolverResult::False;
                                     }
                                 },
                                 None => {
-                                    debug!("evaluating false (no i64 left) for {:?}", expression);
+                                    debug!(
+                                        "evaluating false, invalid type on right hand side for {:?}",
+                                        expression
+                                    );
                                     return SolverResult::False;
                                 }
                             }
                         }
                         Expression::Integer(i) => *i,
                         _ => {
-                            debug!("encountered invalid left hand side for {:?}", expression);
+                            debug!("encountered invalid right hand side for {:?}", expression);
                             return SolverResult::False;
                         }
                     };
@@ -251,7 +379,10 @@ fn solve_expression(
             debug!("evaluating {:?} for {:?}", res, expression);
             res
         }
-        Expression::Cast(_, _) | Expression::Field(_) | Expression::Integer(_) => unreachable!(),
+        Expression::Boolean(_)
+        | Expression::Cast(_, _)
+        | Expression::Field(_)
+        | Expression::Integer(_) => unreachable!(),
     }
 }
 
