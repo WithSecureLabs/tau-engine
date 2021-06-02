@@ -46,7 +46,7 @@ fn solve_expression(
                     BoolSym::Equal,
                     Expression::Cast(ref right, MiscSym::Str),
                 ) => {
-                    let x = match document.get_value(left) {
+                    let x = match document.find(left) {
                         Some(x) => x,
                         None => {
                             debug!("evaluating missing, no left hand side for {}", expression);
@@ -63,7 +63,7 @@ fn solve_expression(
                             return SolverResult::False;
                         }
                     };
-                    let y = match document.get_value(right) {
+                    let y = match document.find(right) {
                         Some(x) => x,
                         None => {
                             debug!("evaluating missing, no right hand side for {}", expression);
@@ -87,7 +87,7 @@ fn solve_expression(
                     }
                 }
                 (Expression::Field(ref left), BoolSym::Equal, Expression::Boolean(b)) => {
-                    let x = match document.get_value(left) {
+                    let x = match document.find(left) {
                         Some(x) => x,
                         None => {
                             debug!("evaluating missing, no left hand side for {}", expression);
@@ -121,7 +121,7 @@ fn solve_expression(
                 | BoolSym::LessThanOrEqual => {
                     let x = match left.as_ref() {
                         Expression::Field(f) => {
-                            let i = match document.get_value(f) {
+                            let i = match document.find(f) {
                                 Some(i) => i,
                                 None => {
                                     debug!(
@@ -143,7 +143,7 @@ fn solve_expression(
                             }
                         }
                         Expression::Cast(c, MiscSym::Int) => {
-                            let i = match document.get_value(c) {
+                            let i = match document.find(c) {
                                 Some(i) => i,
                                 None => {
                                     debug!(
@@ -181,7 +181,7 @@ fn solve_expression(
                     };
                     let y = match right.as_ref() {
                         Expression::Field(f) => {
-                            let i = match document.get_value(f) {
+                            let i = match document.find(f) {
                                 Some(i) => i,
                                 None => {
                                     debug!(
@@ -203,7 +203,7 @@ fn solve_expression(
                             }
                         }
                         Expression::Cast(c, MiscSym::Int) => {
-                            let i = match document.get_value(c) {
+                            let i = match document.find(c) {
                                 Some(i) => i,
                                 None => {
                                     debug!(
@@ -318,7 +318,7 @@ fn solve_expression(
             res
         }
         Expression::Nested(ref s, ref e) => {
-            let value = match document.get_value(s) {
+            let value = match document.find(s) {
                 Some(v) => v,
                 None => {
                     debug!("evaluating missing, field not found for {}", expression);
@@ -348,7 +348,7 @@ fn solve_expression(
             }
         }
         Expression::Search(ref s, ref f) => {
-            let value = match document.get_value(f) {
+            let value = match document.find(f) {
                 Some(v) => v,
                 None => {
                     debug!("evaluating missing, field not found for {}", expression);
