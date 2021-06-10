@@ -5,7 +5,9 @@ use serde::de::{self, Deserializer, MapAccess, Visitor};
 use serde::{Deserialize, Serialize};
 use serde_yaml::Value as Yaml;
 
+use crate::document::Document;
 use crate::parser::{self, Expression};
+use crate::solver;
 use crate::tokeniser::Tokeniser;
 
 #[derive(Clone, Serialize)]
@@ -118,10 +120,15 @@ pub struct Rule {
 }
 
 impl Rule {
+    #[inline]
+    pub fn matches(&self, document: &dyn Document) -> bool {
+        solver::solve(&self.detection, document)
+    }
+
     pub fn validate(&self) -> crate::Result<bool> {
         let mut errors = vec![];
         for test in &self.true_positives {
-            if !(crate::solver::solve(&self.detection, test.as_mapping().unwrap())) {
+            if !(solver::solve(&self.detection, test.as_mapping().unwrap())) {
                 errors.push(format!(
                     "failed to validate true positive check '{:?}'",
                     test
@@ -129,7 +136,7 @@ impl Rule {
             }
         }
         for test in &self.true_negatives {
-            if crate::solver::solve(&self.detection, test.as_mapping().unwrap()) {
+            if solver::solve(&self.detection, test.as_mapping().unwrap()) {
                 errors.push(format!(
                     "failed to validate true negative check '{:?}'",
                     test
