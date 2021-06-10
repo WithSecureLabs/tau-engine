@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use serde_json::map::Map;
 pub use serde_json::{Number, Value as Json};
 
+use crate::document::Document;
 use crate::value::{AsValue, Object, Value};
 
 impl AsValue for Json {
@@ -26,6 +27,15 @@ impl AsValue for Json {
             Self::Object(o) => Value::Object(o),
             Self::Array(a) => Value::Array(a),
         }
+    }
+}
+
+impl Document for Json {
+    fn find(&self, key: &str) -> Option<Value> {
+        if let Json::Object(o) = self {
+            return Object::find(o, key);
+        }
+        None
     }
 }
 
