@@ -120,26 +120,26 @@ impl Tokeniser for String {
                     }
                 }
                 'a'..='z' | 'A'..='Z' => {
-                    if match_ahead(&mut it, "int") {
+                    if match_ahead(&mut it, "int(") {
                         tokens.push(Token::Miscellaneous(MiscSym::Int));
                         it.nth(2);
-                    } else if match_ahead(&mut it, "string") {
+                    } else if match_ahead(&mut it, "string(") {
                         // NOTE: Deprecated
                         tokens.push(Token::Miscellaneous(MiscSym::Str));
                         it.nth(5);
-                    } else if match_ahead(&mut it, "str") {
+                    } else if match_ahead(&mut it, "str(") {
                         tokens.push(Token::Miscellaneous(MiscSym::Str));
                         it.nth(2);
-                    } else if match_ahead(&mut it, "all of") {
+                    } else if match_ahead(&mut it, "all of ") {
                         tokens.push(Token::Search(SearchSym::All));
                         it.nth(5);
-                    } else if match_ahead(&mut it, "and") {
+                    } else if match_ahead(&mut it, "and ") {
                         tokens.push(Token::Operator(BoolSym::And));
                         it.nth(2);
-                    } else if match_ahead(&mut it, "or") {
+                    } else if match_ahead(&mut it, "or ") {
                         tokens.push(Token::Operator(BoolSym::Or));
                         it.nth(1);
-                    } else if match_ahead(&mut it, "not") {
+                    } else if match_ahead(&mut it, "not ") {
                         tokens.push(Token::Miscellaneous(MiscSym::Not));
                         it.nth(2);
                     } else {
