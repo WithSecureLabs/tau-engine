@@ -8,7 +8,7 @@ use serde_yaml::{Mapping, Value as Yaml};
 use tracing::debug;
 
 use crate::identifier::{Identifier, IdentifierParser};
-use crate::tokeniser::{BoolSym, DelSym, MiscSym, Token};
+use crate::tokeniser::{BoolSym, DelSym, MatchSym, MiscSym, Token};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum MatchType {
@@ -16,6 +16,12 @@ pub enum MatchType {
     EndsWith(String),
     Exact(String),
     StartsWith(String),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Match {
+    All,
+    Of(i64),
 }
 
 #[derive(Clone, Debug)]
@@ -55,12 +61,14 @@ impl PartialEq for Search {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
+    BooleanGroup(BoolSym, Vec<Expression>),
     BooleanExpression(Box<Expression>, BoolSym, Box<Expression>),
     Boolean(bool),
     Cast(String, MiscSym),
     Field(String),
     Identifier(String),
     Integer(i64),
+    Match(Match, Box<Expression>),
     Negate(Box<Expression>),
     Nested(String, Box<Expression>),
     Search(Search, String),
@@ -68,12 +76,25 @@ pub enum Expression {
 impl fmt::Display for Expression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::BooleanGroup(o, g) => write!(
+                f,
+                "group({} {})",
+                o,
+                g.iter()
+                    .map(|e| e.to_string())
+                    .collect::<Vec<String>>()
+                    .join(",")
+            ),
             Self::BooleanExpression(l, o, r) => write!(f, "expression({} {} {})", l, o, r),
             Self::Boolean(b) => write!(f, "bool({})", b),
             Self::Cast(s, t) => write!(f, "cast({}({}))", t, s),
             Self::Field(s) => write!(f, "field({})", s),
             Self::Identifier(s) => write!(f, "identifier({})", s),
             Self::Integer(i) => write!(f, "int({})", i),
+            Self::Match(Match::All, e) => {
+                write!(f, "all({})", e)
+            }
+            Self::Match(Match::Of(i), e) => write!(f, "of({}, {})", e, i),
             Self::Negate(e) => write!(f, "negate({})", e),
             Self::Nested(s, e) => write!(f, "nested({}, {})", s, e),
             Self::Search(e, s) => write!(f, "search({}, {})", s, e),
@@ -224,7 +245,7 @@ where
             | Token::Identifier(_)
             | Token::Integer(_)
             | Token::Miscellaneous(_)
-            | Token::Search(_) => Err(crate::error::parse_invalid_token(format!(
+            | Token::Match(_) => Err(crate::error::parse_invalid_token(format!(
                 "LED encountered - '{:?}'",
                 t
             ))),
@@ -259,10 +280,9 @@ where
                         }
                         parse(&&tokens)
                     }
-                    DelSym::RightParenthesis => Err(crate::error::parse_invalid_token(format!(
-                        "NUD encountered - '{:?}'",
-                        t
-                    ))),
+                    DelSym::Comma | DelSym::RightParenthesis => Err(
+                        crate::error::parse_invalid_token(format!("NUD encountered - '{:?}'", t)),
+                    ),
                 },
                 Token::Identifier(ref n) => Ok(Expression::Identifier(n.to_string())),
                 Token::Integer(ref n) => Ok(Expression::Integer(*n)),
@@ -323,7 +343,7 @@ where
                         Ok(Expression::Negate(Box::new(right)))
                     }
                     MiscSym::Str => {
-                        // We expect String(column_identifier)
+                        // We expect string(column_identifier)
                         if let Some(t) = it.next() {
                             match *t {
                                 Token::Delimiter(DelSym::LeftParenthesis) => {}
@@ -372,9 +392,141 @@ where
                         }
                     }
                 },
-                Token::Operator(_) | Token::Search(_) => Err(crate::error::parse_invalid_token(
-                    format!("NUD encountered - '{:?}'", t),
-                )),
+                Token::Match(ref m) => match *m {
+                    MatchSym::All => {
+                        // We expect all(column_identifier)
+                        if let Some(t) = it.next() {
+                            match *t {
+                                Token::Delimiter(DelSym::LeftParenthesis) => {}
+                                _ => {
+                                    return Err(crate::error::parse_invalid_token(format!(
+                                        "NUD expected left parenthesis - '{:?}'",
+                                        t
+                                    )));
+                                }
+                            }
+                        } else {
+                            return Err(crate::error::parse_invalid_token(
+                                "NUD expected left parenthesis",
+                            ));
+                        }
+                        let token = match it.next() {
+                            Some(t) => t,
+                            None => {
+                                return Err(crate::error::parse_invalid_token(
+                                    "NUD expected column identifier",
+                                ));
+                            }
+                        };
+                        if let Some(t) = it.next() {
+                            match *t {
+                                Token::Delimiter(DelSym::RightParenthesis) => {}
+                                _ => {
+                                    return Err(crate::error::parse_invalid_token(format!(
+                                        "NUD expected right parenthesis - '{:?}'",
+                                        t
+                                    )));
+                                }
+                            }
+                        } else {
+                            return Err(crate::error::parse_invalid_token(
+                                "NUD expected right parenthesis",
+                            ));
+                        }
+                        match *token {
+                            Token::Identifier(ref s) => Ok(Expression::Match(
+                                Match::All,
+                                Box::new(Expression::Identifier(s.to_string())),
+                            )),
+                            _ => Err(crate::error::parse_invalid_token(
+                                "NUD expected column identifier",
+                            )),
+                        }
+                    }
+                    MatchSym::Of => {
+                        // We expect of(column_identifier, 1)
+                        if let Some(t) = it.next() {
+                            match *t {
+                                Token::Delimiter(DelSym::LeftParenthesis) => {}
+                                _ => {
+                                    return Err(crate::error::parse_invalid_token(format!(
+                                        "NUD expected left parenthesis - '{:?}'",
+                                        t
+                                    )));
+                                }
+                            }
+                        } else {
+                            return Err(crate::error::parse_invalid_token(
+                                "NUD expected left parenthesis",
+                            ));
+                        }
+                        let token = match it.next() {
+                            Some(t) => t,
+                            None => {
+                                return Err(crate::error::parse_invalid_token(
+                                    "NUD expected column identifier",
+                                ));
+                            }
+                        };
+                        if let Some(t) = it.next() {
+                            match *t {
+                                Token::Delimiter(DelSym::Comma) => {}
+                                _ => {
+                                    return Err(crate::error::parse_invalid_token(format!(
+                                        "NUD expected comma - '{:?}'",
+                                        t
+                                    )));
+                                }
+                            }
+                        } else {
+                            return Err(crate::error::parse_invalid_token("NUD expected comma"));
+                        }
+                        let count = match it.next() {
+                            Some(t) => match t {
+                                Token::Integer(c) => c,
+                                _ => {
+                                    return Err(crate::error::parse_invalid_token(format!(
+                                        "NUD expected integer - '{:?}'",
+                                        t
+                                    )));
+                                }
+                            },
+                            None => {
+                                return Err(crate::error::parse_invalid_token(
+                                    "NUD expected integer",
+                                ));
+                            }
+                        };
+                        if let Some(t) = it.next() {
+                            match *t {
+                                Token::Delimiter(DelSym::RightParenthesis) => {}
+                                _ => {
+                                    return Err(crate::error::parse_invalid_token(format!(
+                                        "NUD expected right parenthesis - '{:?}'",
+                                        t
+                                    )));
+                                }
+                            }
+                        } else {
+                            return Err(crate::error::parse_invalid_token(
+                                "NUD expected right parenthesis",
+                            ));
+                        }
+                        match *token {
+                            Token::Identifier(ref s) => Ok(Expression::Match(
+                                Match::Of(*count),
+                                Box::new(Expression::Identifier(s.to_string())),
+                            )),
+                            _ => Err(crate::error::parse_invalid_token(
+                                "NUD expected column identifier",
+                            )),
+                        }
+                    }
+                },
+                Token::Operator(_) => Err(crate::error::parse_invalid_token(format!(
+                    "NUD encountered - '{:?}'",
+                    t
+                ))),
             }
         }
         None => Err(crate::error::parse_invalid_token("NUD expected token")),
@@ -392,15 +544,11 @@ pub fn parse_identifier(yaml: &Yaml) -> crate::Result<Expression> {
             match it.next() {
                 Some(v) => match &v {
                     Yaml::Mapping(m) => {
-                        let mut expression = parse_mapping(&m)?;
+                        let mut expressions = vec![parse_mapping(&m)?];
                         for value in it {
                             // NOTE: A sequence can only be one type
                             if let Yaml::Mapping(mapping) = value {
-                                expression = Expression::BooleanExpression(
-                                    Box::new(expression),
-                                    BoolSym::Or,
-                                    Box::new(parse_mapping(mapping)?),
-                                );
+                                expressions.push(parse_mapping(mapping)?);
                             } else {
                                 return Err(crate::error::parse_invalid_ident(format!(
                                     "expected a sequence of mappings, encountered - {:?}",
@@ -408,7 +556,7 @@ pub fn parse_identifier(yaml: &Yaml) -> crate::Result<Expression> {
                                 )));
                             }
                         }
-                        Ok(expression)
+                        Ok(Expression::BooleanGroup(BoolSym::Or, expressions))
                     }
                     _ => Err(crate::error::parse_invalid_ident(format!(
                         "expected a sequence of mappings, encountered - {:?}",
@@ -429,7 +577,7 @@ pub fn parse_identifier(yaml: &Yaml) -> crate::Result<Expression> {
 }
 
 fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
-    let mut expression = None;
+    let mut expressions = vec![];
     // TODO: Clean
     for (k, v) in mapping {
         let k = match k {
@@ -448,16 +596,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                     BoolSym::Equal,
                     Box::new(Expression::Boolean(*b)),
                 );
-                match expression {
-                    Some(e) => {
-                        expression = Some(Expression::BooleanExpression(
-                            Box::new(e),
-                            BoolSym::And,
-                            Box::new(expr),
-                        ))
-                    }
-                    None => expression = Some(expr),
-                }
+                expressions.push(expr);
             }
             Yaml::Number(n) => {
                 if let Some(i) = n.as_i64() {
@@ -466,16 +605,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         BoolSym::Equal,
                         Box::new(Expression::Integer(i)),
                     );
-                    match expression {
-                        Some(e) => {
-                            expression = Some(Expression::BooleanExpression(
-                                Box::new(e),
-                                BoolSym::And,
-                                Box::new(expr),
-                            ))
-                        }
-                        None => expression = Some(expr),
-                    }
+                    expressions.push(expr);
                     continue;
                 }
                 return Err(crate::error::parse_invalid_ident(format!(
@@ -572,16 +702,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         k.to_owned(),
                     ),
                 };
-                match expression {
-                    Some(e) => {
-                        expression = Some(Expression::BooleanExpression(
-                            Box::new(e),
-                            BoolSym::And,
-                            Box::new(expr),
-                        ))
-                    }
-                    None => expression = Some(expr),
-                }
+                expressions.push(expr);
             }
             Yaml::Sequence(ref s) => {
                 // Now we need to be as fast as possible it turns out that builtin strings functions are
@@ -674,7 +795,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         )),
                     }
                 }
-                let mut expressions: Vec<Expression> = vec![];
+                let mut group: Vec<Expression> = vec![];
                 let mut needles: Vec<String> = vec![];
                 let mut context: Vec<MatchType> = vec![];
                 for i in starts_with.into_iter() {
@@ -700,7 +821,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         // NOTE: Do not allow empty string into the needles as it causes massive slow down,
                         // don't ask me why I have not looked into it!
                         if i == "" {
-                            expressions.push(Expression::Search(Search::Exact(i), k.clone()));
+                            group.push(Expression::Search(Search::Exact(i), k.clone()));
                         } else {
                             context.push(MatchType::Exact(i.to_string()));
                             needles.push(i);
@@ -708,7 +829,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                     }
                 }
                 if !needles.is_empty() {
-                    expressions.push(Expression::Search(
+                    group.push(Expression::Search(
                         Search::AhoCorasick(
                             Box::new(
                                 AhoCorasickBuilder::new()
@@ -721,37 +842,13 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         k.clone(),
                     ));
                 }
-                expressions.extend(
+                group.extend(
                     regex
                         .into_iter()
                         .map(|r| Expression::Search(Search::Regex(r), k.to_string())),
                 );
-                expressions.extend(rest);
-                let mut exprs = None;
-                for expr in expressions.into_iter().rev() {
-                    match exprs {
-                        Some(e) => {
-                            exprs = Some(Expression::BooleanExpression(
-                                Box::new(expr),
-                                BoolSym::Or,
-                                Box::new(e),
-                            ))
-                        }
-                        None => exprs = Some(expr),
-                    }
-                }
-                if let Some(expr) = exprs {
-                    match expression {
-                        Some(e) => {
-                            expression = Some(Expression::BooleanExpression(
-                                Box::new(e),
-                                BoolSym::And,
-                                Box::new(expr),
-                            ))
-                        }
-                        None => expression = Some(expr),
-                    }
-                }
+                group.extend(rest);
+                expressions.push(Expression::BooleanGroup(BoolSym::Or, group));
             }
             _ => {
                 return Err(crate::error::parse_invalid_ident(format!(
@@ -761,7 +858,10 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
             }
         }
     }
-    expression.ok_or(crate::error::parse_invalid_ident("failed to parse mapping"))
+    if expressions.is_empty() {
+        return Err(crate::error::parse_invalid_ident("failed to parse mapping"));
+    }
+    Ok(Expression::BooleanGroup(BoolSym::And, expressions))
 }
 
 #[cfg(test)]

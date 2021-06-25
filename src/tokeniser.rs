@@ -30,6 +30,7 @@ impl fmt::Display for BoolSym {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum DelSym {
+    Comma,
     LeftParenthesis,
     RightParenthesis,
 }
@@ -51,9 +52,9 @@ impl fmt::Display for MiscSym {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum SearchSym {
+pub enum MatchSym {
     All,
-    Of(u32),
+    Of,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -63,7 +64,7 @@ pub enum Token {
     Integer(i64),
     Operator(BoolSym),
     Miscellaneous(MiscSym),
-    Search(SearchSym),
+    Match(MatchSym),
 }
 
 impl Token {
@@ -82,8 +83,8 @@ impl Token {
                 MiscSym::Not => 95,
                 _ => 0,
             },
-            Token::Search(ref s) => match *s {
-                SearchSym::All | SearchSym::Of(_) => 60,
+            Token::Match(ref s) => match *s {
+                MatchSym::All | MatchSym::Of => 60,
             },
             Token::Delimiter(_) | Token::Identifier(_) | Token::Integer(_) => 0,
         }
@@ -106,18 +107,7 @@ impl Tokeniser for String {
                         .into_iter()
                         .collect();
                     let integer = integer.parse().map_err(crate::error::token_invalid_num)?;
-                    // Check if it preceeds of
-                    if match_ahead(&mut it, " of") {
-                        if integer < 0 {
-                            return Err(crate::error::token_invalid_num(
-                                "'x of' cannot be negative",
-                            ));
-                        }
-                        tokens.push(Token::Search(SearchSym::Of(integer as u32)));
-                        it.nth(2);
-                    } else {
-                        tokens.push(Token::Integer(integer));
-                    }
+                    tokens.push(Token::Integer(integer));
                 }
                 'a'..='z' | 'A'..='Z' => {
                     if match_ahead(&mut it, "int(") {
@@ -130,9 +120,6 @@ impl Tokeniser for String {
                     } else if match_ahead(&mut it, "str(") {
                         tokens.push(Token::Miscellaneous(MiscSym::Str));
                         it.nth(2);
-                    } else if match_ahead(&mut it, "all of ") {
-                        tokens.push(Token::Search(SearchSym::All));
-                        it.nth(5);
                     } else if match_ahead(&mut it, "and ") {
                         tokens.push(Token::Operator(BoolSym::And));
                         it.nth(2);
@@ -142,6 +129,12 @@ impl Tokeniser for String {
                     } else if match_ahead(&mut it, "not ") {
                         tokens.push(Token::Miscellaneous(MiscSym::Not));
                         it.nth(2);
+                    } else if match_ahead(&mut it, "all(") {
+                        tokens.push(Token::Match(MatchSym::All));
+                        it.nth(2);
+                    } else if match_ahead(&mut it, "of(") {
+                        tokens.push(Token::Match(MatchSym::Of));
+                        it.nth(1);
                     } else {
                         let identifier: String =
                             consume_while(&mut it, |a| a.is_alphanumeric() || a == '_' || a == '.')
@@ -186,6 +179,11 @@ impl Tokeniser for String {
                     } else {
                         tokens.push(Token::Operator(BoolSym::GreaterThan));
                     }
+                    it.next();
+                }
+                ',' => {
+                    // ","
+                    tokens.push(Token::Delimiter(DelSym::Comma));
                     it.next();
                 }
                 '(' => {
@@ -386,11 +384,13 @@ mod test {
 
     #[test]
     fn tokeniser_search_all() {
-        let t = String::from("all of a").tokenise().unwrap();
+        let t = String::from("all(a)").tokenise().unwrap();
         assert_eq!(
             vec![
-                Token::Search(SearchSym::All),
+                Token::Match(MatchSym::All),
+                Token::Delimiter(DelSym::LeftParenthesis),
                 Token::Identifier("a".to_string()),
+                Token::Delimiter(DelSym::RightParenthesis),
             ],
             t
         );
@@ -398,11 +398,15 @@ mod test {
 
     #[test]
     fn tokeniser_search_x_of() {
-        let t = String::from("2 of a").tokenise().unwrap();
+        let t = String::from("of(a, 2)").tokenise().unwrap();
         assert_eq!(
             vec![
-                Token::Search(SearchSym::Of(2)),
+                Token::Match(MatchSym::Of),
+                Token::Delimiter(DelSym::LeftParenthesis),
                 Token::Identifier("a".to_string()),
+                Token::Delimiter(DelSym::Comma),
+                Token::Integer(2),
+                Token::Delimiter(DelSym::RightParenthesis),
             ],
             t
         );

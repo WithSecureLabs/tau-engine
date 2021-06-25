@@ -4,7 +4,7 @@ use std::fmt;
 use tracing::debug;
 
 use crate::document::Document;
-use crate::parser::{Expression, MatchType, Search};
+use crate::parser::{Expression, Match, MatchType, Search};
 use crate::rule::Detection;
 use crate::tokeniser::{BoolSym, MiscSym};
 use crate::value::Value;
@@ -38,6 +38,27 @@ fn solve_expression(
     document: &dyn Document,
 ) -> SolverResult {
     match *expression {
+        Expression::BooleanGroup(BoolSym::And, ref group) => {
+            for expression in group {
+                match solve_expression(expression, identifiers, document) {
+                    SolverResult::True => {}
+                    SolverResult::False => return SolverResult::False,
+                    SolverResult::Missing => return SolverResult::Missing,
+                }
+            }
+            SolverResult::True
+        }
+        Expression::BooleanGroup(BoolSym::Or, ref group) => {
+            let mut res = SolverResult::Missing;
+            for expression in group {
+                match solve_expression(expression, identifiers, document) {
+                    SolverResult::True => return SolverResult::True,
+                    SolverResult::False => res = SolverResult::False,
+                    SolverResult::Missing => {}
+                }
+            }
+            res
+        }
         Expression::BooleanExpression(ref left, ref op, ref right) => {
             // Edge cases
             match (&**left, op, &**right) {
@@ -308,6 +329,49 @@ fn solve_expression(
             Some(e) => solve_expression(e, identifiers, document),
             None => unreachable!(),
         },
+        Expression::Match(Match::All, ref e) => {
+            let i = match **e {
+                Expression::Identifier(ref i) => i,
+                _ => unreachable!(),
+            };
+            let (_, group) = match identifiers.get(i) {
+                Some(Expression::BooleanGroup(o, g)) => (o, g),
+                _ => unreachable!(),
+            };
+            for expression in group {
+                match solve_expression(expression, identifiers, document) {
+                    SolverResult::True => {}
+                    SolverResult::False => return SolverResult::False,
+                    SolverResult::Missing => return SolverResult::Missing,
+                }
+            }
+            SolverResult::True
+        }
+        Expression::Match(Match::Of(c), ref e) => {
+            let i = match **e {
+                Expression::Identifier(ref i) => i,
+                _ => unreachable!(),
+            };
+            let (_, group) = match identifiers.get(i) {
+                Some(Expression::BooleanGroup(o, g)) => (o, g),
+                _ => unreachable!(),
+            };
+            let mut count = 0;
+            let mut res = SolverResult::Missing;
+            for expression in group {
+                match solve_expression(expression, identifiers, document) {
+                    SolverResult::True => {
+                        count += 1;
+                        if count >= c {
+                            return SolverResult::True;
+                        }
+                    }
+                    SolverResult::False => res = SolverResult::False,
+                    SolverResult::Missing => {}
+                }
+            }
+            res
+        }
         Expression::Negate(ref e) => {
             let res = match solve_expression(e.as_ref(), identifiers, document) {
                 SolverResult::True => SolverResult::False,
@@ -383,7 +447,8 @@ fn solve_expression(
             debug!("evaluating {} for {}", res, expression);
             res
         }
-        Expression::Boolean(_)
+        Expression::BooleanGroup(_, _)
+        | Expression::Boolean(_)
         | Expression::Cast(_, _)
         | Expression::Field(_)
         | Expression::Integer(_) => unreachable!(),
