@@ -8,7 +8,7 @@ use serde_yaml::{Mapping, Value as Yaml};
 use tracing::debug;
 
 use crate::identifier::{Identifier, IdentifierParser};
-use crate::tokeniser::{BoolSym, DelSym, MatchSym, MiscSym, Token};
+use crate::tokeniser::{BoolSym, DelSym, MatchSym, MiscSym, Token, Tokeniser};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum MatchType {
@@ -580,8 +580,42 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
     let mut expressions = vec![];
     // TODO: Clean
     for (k, v) in mapping {
-        let k = match k {
-            Yaml::String(s) => s,
+        let (e, f) = match k {
+            Yaml::String(s) => {
+                let tokens = s.tokenise()?;
+                let expr = parse(&tokens)?;
+                let (e, s) = match expr {
+                    Expression::Identifier(s) => (Expression::Field(s.clone()), s),
+                    Expression::Match(m, i) => {
+                        if let Yaml::Sequence(_) = v {
+                            match *i {
+                                Expression::Identifier(s) => (
+                                    Expression::Match(m, Box::new(Expression::Field(s.clone()))),
+                                    s,
+                                ),
+                                _ => {
+                                    return Err(crate::error::parse_invalid_ident(format!(
+                                        "match condition mut contain a field, encountered - {:?}",
+                                        k
+                                    )))
+                                }
+                            }
+                        } else {
+                            return Err(crate::error::parse_invalid_ident(format!(
+                                "match condition is only valid for sequences, encountered - {:?}",
+                                k
+                            )));
+                        }
+                    }
+                    _ => {
+                        return Err(crate::error::parse_invalid_ident(format!(
+                        "mapping key must be a string or valid match condition, encountered - {:?}",
+                        k
+                    )))
+                    }
+                };
+                (e, s)
+            }
             _ => {
                 return Err(crate::error::parse_invalid_ident(format!(
                     "mapping key must be a string, encountered - {:?}",
@@ -592,7 +626,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
         match v {
             Yaml::Bool(b) => {
                 let expr = Expression::BooleanExpression(
-                    Box::new(Expression::Field(k.to_owned())),
+                    Box::new(e.clone()),
                     BoolSym::Equal,
                     Box::new(Expression::Boolean(*b)),
                 );
@@ -601,7 +635,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
             Yaml::Number(n) => {
                 if let Some(i) = n.as_i64() {
                     let expr = Expression::BooleanExpression(
-                        Box::new(Expression::Field(k.to_owned())),
+                        Box::new(e.clone()),
                         BoolSym::Equal,
                         Box::new(Expression::Integer(i)),
                     );
@@ -617,31 +651,31 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                 let search = s.to_owned().into_identifier()?;
                 let expr = match search {
                     Identifier::Equal(i) => Expression::BooleanExpression(
-                        Box::new(Expression::Field(k.to_owned())),
+                        Box::new(e.clone()),
                         BoolSym::Equal,
                         Box::new(Expression::Integer(i)),
                     ),
                     Identifier::GreaterThan(i) => Expression::BooleanExpression(
-                        Box::new(Expression::Field(k.to_owned())),
+                        Box::new(e.clone()),
                         BoolSym::GreaterThan,
                         Box::new(Expression::Integer(i)),
                     ),
                     Identifier::GreaterThanOrEqual(i) => Expression::BooleanExpression(
-                        Box::new(Expression::Field(k.to_owned())),
+                        Box::new(e.clone()),
                         BoolSym::GreaterThanOrEqual,
                         Box::new(Expression::Integer(i)),
                     ),
                     Identifier::LessThan(i) => Expression::BooleanExpression(
-                        Box::new(Expression::Field(k.to_owned())),
+                        Box::new(e.clone()),
                         BoolSym::LessThan,
                         Box::new(Expression::Integer(i)),
                     ),
                     Identifier::LessThanOrEqual(i) => Expression::BooleanExpression(
-                        Box::new(Expression::Field(k.to_owned())),
+                        Box::new(e.clone()),
                         BoolSym::LessThanOrEqual,
                         Box::new(Expression::Integer(i)),
                     ),
-                    Identifier::Regex(c) => Expression::Search(Search::Regex(c), k.to_owned()),
+                    Identifier::Regex(c) => Expression::Search(Search::Regex(c), f.to_owned()),
                     // NOTE: Off because we want case insensitive everywhere...
                     //Identifier::Contains(c) => {
                     //    Expression::Search(Search::Contains(c), k.to_owned())
@@ -663,7 +697,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                             ),
                             vec![MatchType::Contains(c)],
                         ),
-                        k.to_owned(),
+                        f.to_owned(),
                     ),
                     Identifier::EndsWith(c) => Expression::Search(
                         Search::AhoCorasick(
@@ -675,7 +709,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                             ),
                             vec![MatchType::EndsWith(c)],
                         ),
-                        k.to_owned(),
+                        f.to_owned(),
                     ),
                     Identifier::Exact(c) => Expression::Search(
                         Search::AhoCorasick(
@@ -687,7 +721,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                             ),
                             vec![MatchType::Exact(c)],
                         ),
-                        k.to_owned(),
+                        f.to_owned(),
                     ),
                     Identifier::StartsWith(c) => Expression::Search(
                         Search::AhoCorasick(
@@ -699,7 +733,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                             ),
                             vec![MatchType::StartsWith(c)],
                         ),
-                        k.to_owned(),
+                        f.to_owned(),
                     ),
                 };
                 expressions.push(expr);
@@ -728,7 +762,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                     let identifier = match value {
                         Yaml::Bool(b) => {
                             rest.push(Expression::BooleanExpression(
-                                Box::new(Expression::Field(k.to_owned())),
+                                Box::new(e.clone()),
                                 BoolSym::Equal,
                                 Box::new(Expression::Boolean(*b)),
                             ));
@@ -737,7 +771,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         Yaml::Number(n) => {
                             if let Some(i) = n.as_i64() {
                                 rest.push(Expression::BooleanExpression(
-                                    Box::new(Expression::Field(k.to_owned())),
+                                    Box::new(e.clone()),
                                     BoolSym::Equal,
                                     Box::new(Expression::Integer(i)),
                                 ));
@@ -750,7 +784,10 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         }
                         Yaml::String(s) => s.clone().into_identifier()?,
                         Yaml::Mapping(m) => {
-                            rest.push(Expression::Nested(k.clone(), Box::new(parse_mapping(m)?)));
+                            rest.push(Expression::Nested(
+                                f.to_owned(),
+                                Box::new(parse_mapping(m)?),
+                            ));
                             continue;
                         }
                         _ => {
@@ -767,29 +804,29 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         Identifier::Contains(_) => contains.push(identifier),
                         Identifier::Regex(r) => regex.push(r),
                         Identifier::Equal(i) => rest.push(Expression::BooleanExpression(
-                            Box::new(Expression::Field(k.to_owned())),
+                            Box::new(e.clone()),
                             BoolSym::Equal,
                             Box::new(Expression::Integer(i)),
                         )),
                         Identifier::GreaterThan(i) => rest.push(Expression::BooleanExpression(
-                            Box::new(Expression::Field(k.to_owned())),
+                            Box::new(e.clone()),
                             BoolSym::GreaterThan,
                             Box::new(Expression::Integer(i)),
                         )),
                         Identifier::GreaterThanOrEqual(i) => {
                             rest.push(Expression::BooleanExpression(
-                                Box::new(Expression::Field(k.to_owned())),
+                                Box::new(e.clone()),
                                 BoolSym::GreaterThanOrEqual,
                                 Box::new(Expression::Integer(i)),
                             ))
                         }
                         Identifier::LessThan(i) => rest.push(Expression::BooleanExpression(
-                            Box::new(Expression::Field(k.to_owned())),
+                            Box::new(e.clone()),
                             BoolSym::LessThan,
                             Box::new(Expression::Integer(i)),
                         )),
                         Identifier::LessThanOrEqual(i) => rest.push(Expression::BooleanExpression(
-                            Box::new(Expression::Field(k.to_owned())),
+                            Box::new(e.clone()),
                             BoolSym::LessThanOrEqual,
                             Box::new(Expression::Integer(i)),
                         )),
@@ -821,7 +858,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         // NOTE: Do not allow empty string into the needles as it causes massive slow down,
                         // don't ask me why I have not looked into it!
                         if i == "" {
-                            group.push(Expression::Search(Search::Exact(i), k.clone()));
+                            group.push(Expression::Search(Search::Exact(i), f.to_owned()));
                         } else {
                             context.push(MatchType::Exact(i.to_string()));
                             needles.push(i);
@@ -839,16 +876,23 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                             ),
                             context,
                         ),
-                        k.clone(),
+                        f.to_owned(),
                     ));
                 }
                 group.extend(
                     regex
                         .into_iter()
-                        .map(|r| Expression::Search(Search::Regex(r), k.to_string())),
+                        .map(|r| Expression::Search(Search::Regex(r), f.to_owned())),
                 );
                 group.extend(rest);
-                expressions.push(Expression::BooleanGroup(BoolSym::Or, group));
+                if let Expression::Match(m, _) = e {
+                    expressions.push(Expression::Match(
+                        m,
+                        Box::new(Expression::BooleanGroup(BoolSym::Or, group)),
+                    ));
+                } else {
+                    expressions.push(Expression::BooleanGroup(BoolSym::Or, group));
+                }
             }
             _ => {
                 return Err(crate::error::parse_invalid_ident(format!(

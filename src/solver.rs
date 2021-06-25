@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
+use aho_corasick::AhoCorasick;
 use tracing::debug;
 
 use crate::document::Document;
@@ -330,44 +331,123 @@ fn solve_expression(
             None => unreachable!(),
         },
         Expression::Match(Match::All, ref e) => {
-            let i = match **e {
-                Expression::Identifier(ref i) => i,
-                _ => unreachable!(),
-            };
-            let (_, group) = match identifiers.get(i) {
-                Some(Expression::BooleanGroup(o, g)) => (o, g),
+            let (_, group) = match **e {
+                Expression::Identifier(ref i) => match identifiers.get(i) {
+                    Some(Expression::BooleanGroup(o, g)) => (o, g),
+                    _ => unreachable!(),
+                },
+                Expression::BooleanGroup(ref o, ref g) => (o, g),
                 _ => unreachable!(),
             };
             for expression in group {
-                match solve_expression(expression, identifiers, document) {
-                    SolverResult::True => {}
-                    SolverResult::False => return SolverResult::False,
-                    SolverResult::Missing => return SolverResult::Missing,
+                // NOTE: Because of needle optimisation we have to handle aho in a `slow` fashion here...
+                if let Expression::Search(Search::AhoCorasick(a, m), i) = expression {
+                    let value = match document.find(i) {
+                        Some(v) => v,
+                        None => {
+                            debug!("evaluating missing, field not found for {}", expression);
+                            return SolverResult::Missing;
+                        }
+                    };
+                    match value {
+                        Value::String(ref x) => {
+                            if slow_aho(a, m, x) != m.len() as i64 {
+                                return SolverResult::False;
+                            }
+                        }
+                        Value::Array(x) => {
+                            let mut found = false;
+                            for v in x.iter() {
+                                if let Some(x) = v.as_str() {
+                                    if slow_aho(a, m, x) == m.len() as i64 {
+                                        found = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if !found {
+                                return SolverResult::False;
+                            }
+                        }
+                        _ => {
+                            debug!(
+                                "evaluating false, field is not an array of strings, or a string for {}",
+                                expression
+                            );
+                            return SolverResult::Missing;
+                        }
+                    }
+                } else {
+                    match solve_expression(expression, identifiers, document) {
+                        SolverResult::True => {}
+                        SolverResult::False => return SolverResult::False,
+                        SolverResult::Missing => return SolverResult::Missing,
+                    }
                 }
             }
             SolverResult::True
         }
         Expression::Match(Match::Of(c), ref e) => {
-            let i = match **e {
-                Expression::Identifier(ref i) => i,
-                _ => unreachable!(),
-            };
-            let (_, group) = match identifiers.get(i) {
-                Some(Expression::BooleanGroup(o, g)) => (o, g),
+            let (_, group) = match **e {
+                Expression::Identifier(ref i) => match identifiers.get(i) {
+                    Some(Expression::BooleanGroup(o, g)) => (o, g),
+                    _ => unreachable!(),
+                },
+                Expression::BooleanGroup(ref o, ref g) => (o, g),
                 _ => unreachable!(),
             };
             let mut count = 0;
             let mut res = SolverResult::Missing;
             for expression in group {
-                match solve_expression(expression, identifiers, document) {
-                    SolverResult::True => {
-                        count += 1;
-                        if count >= c {
-                            return SolverResult::True;
+                // NOTE: Because of needle optimisation we have to handle aho in a `slow` fashion here...
+                if let Expression::Search(Search::AhoCorasick(a, m), i) = expression {
+                    let value = match document.find(i) {
+                        Some(v) => v,
+                        None => {
+                            debug!("evaluating missing, field not found for {}", expression);
+                            return SolverResult::Missing;
+                        }
+                    };
+                    match value {
+                        Value::String(ref x) => {
+                            count += slow_aho(a, m, x);
+                            if count >= c {
+                                return SolverResult::True;
+                            }
+                        }
+                        Value::Array(x) => {
+                            let mut max = 0;
+                            for v in x.iter() {
+                                if let Some(x) = v.as_str() {
+                                    let hits = slow_aho(a, m, x);
+                                    if count + hits >= c {
+                                        return SolverResult::True;
+                                    } else if hits > max {
+                                        max = hits;
+                                    }
+                                }
+                            }
+                            count += max;
+                        }
+                        _ => {
+                            debug!(
+                                "evaluating false, field is not an array of strings, or a string for {}",
+                                expression
+                            );
+                            return SolverResult::Missing;
                         }
                     }
-                    SolverResult::False => res = SolverResult::False,
-                    SolverResult::Missing => {}
+                } else {
+                    match solve_expression(expression, identifiers, document) {
+                        SolverResult::True => {
+                            count += 1;
+                            if count >= c {
+                                return SolverResult::True;
+                            }
+                        }
+                        SolverResult::False => res = SolverResult::False,
+                        SolverResult::Missing => {}
+                    }
                 }
             }
             res
@@ -510,6 +590,32 @@ fn search(kind: &Search, value: &str) -> SolverResult {
     SolverResult::False
 }
 
+#[inline]
+fn slow_aho(a: &AhoCorasick, m: &Vec<MatchType>, value: &str) -> i64 {
+    let mut hits = 0;
+    for i in a.find_overlapping_iter(value) {
+        match m[i.pattern()] {
+            MatchType::Contains(_) => hits += 1,
+            MatchType::EndsWith(_) => {
+                if i.end() == value.len() {
+                    hits += 1;
+                }
+            }
+            MatchType::Exact(_) => {
+                if i.start() == 0 && i.end() == value.len() {
+                    hits += 1;
+                }
+            }
+            MatchType::StartsWith(_) => {
+                if i.start() == 0 {
+                    hits += 1;
+                }
+            }
+        }
+    }
+    hits
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -519,6 +625,62 @@ mod tests {
 
     use crate::parser;
     use crate::tokeniser::Tokeniser;
+
+    #[cfg(feature = "json")]
+    #[test]
+    fn solve_of() {
+        // Expression
+        let expression = parser::parse(&"A".to_string().tokenise().unwrap()).unwrap();
+
+        // Identifiers
+        let mut identifiers: HashMap<String, Expression> = HashMap::new();
+        let y = "of(Ex.Args, 3):\n- '?(([^\\$\n])+\\$){22,}'\n- '*five*'\n- '*six*'\n- '*foo*'\nEx.Name: '?powershell.exe'";
+        let v: serde_yaml::Value = serde_yaml::from_str(&y).unwrap();
+        identifiers.insert("A".to_string(), parser::parse_identifier(&v).unwrap());
+
+        // Fake data
+        let j = "{
+            \"Ex\": {
+                \"Name\": \"POWERSHELL.exe\",
+                \"Args\": \"one$two$three$four$five$six$seven$eight$9$10$11$12$13$14$15$16$17$18$19$20$21$22$\"
+            }
+        }";
+        let data: serde_json::Value = serde_json::from_str(&j).unwrap();
+
+        // Assert it cause it could be broken!
+        assert_eq!(
+            solve_expression(&expression, &identifiers, data.as_object().unwrap()),
+            SolverResult::True
+        );
+    }
+
+    #[cfg(feature = "json")]
+    #[test]
+    fn solve_all() {
+        // Expression
+        let expression = parser::parse(&"A".to_string().tokenise().unwrap()).unwrap();
+
+        // Identifiers
+        let mut identifiers: HashMap<String, Expression> = HashMap::new();
+        let y = "all(Ex.Args):\n  - '?(([^\\$\n])+\\$){22,}'\n  - '*five*'\n  - '*six*'\nEx.Name: '?powershell.exe'";
+        let v: serde_yaml::Value = serde_yaml::from_str(&y).unwrap();
+        identifiers.insert("A".to_string(), parser::parse_identifier(&v).unwrap());
+
+        // Fake data
+        let j = "{
+            \"Ex\": {
+                \"Name\": \"POWERSHELL.exe\",
+                \"Args\": \"one$two$three$four$five$six$seven$eight$9$10$11$12$13$14$15$16$17$18$19$20$21$22$\"
+            }
+        }";
+        let data: serde_json::Value = serde_json::from_str(&j).unwrap();
+
+        // Assert it cause it could be broken!
+        assert_eq!(
+            solve_expression(&expression, &identifiers, data.as_object().unwrap()),
+            SolverResult::True
+        );
+    }
 
     #[bench]
     #[cfg(feature = "benchmarks")]
