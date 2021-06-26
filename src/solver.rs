@@ -351,6 +351,7 @@ fn solve_expression(
                     };
                     match value {
                         Value::String(ref x) => {
+                            println!("calling slow");
                             if slow_aho(a, m, x) != m.len() as i64 {
                                 return SolverResult::False;
                             }
@@ -670,28 +671,33 @@ fn search(kind: &Search, value: &str) -> SolverResult {
 
 #[inline]
 fn slow_aho(a: &AhoCorasick, m: &Vec<MatchType>, value: &str) -> i64 {
-    let mut hits = 0;
+    // FIXME: We need to find a way to do this with zero allocations, for now lets just use a
+    // HashSet and make life easy...
+    let mut hits = std::collections::HashSet::new();
     for i in a.find_overlapping_iter(value) {
-        match m[i.pattern()] {
-            MatchType::Contains(_) => hits += 1,
+        let p = i.pattern();
+        match m[p] {
+            MatchType::Contains(_) => {
+                hits.insert(p);
+            }
             MatchType::EndsWith(_) => {
                 if i.end() == value.len() {
-                    hits += 1;
+                    hits.insert(p);
                 }
             }
             MatchType::Exact(_) => {
                 if i.start() == 0 && i.end() == value.len() {
-                    hits += 1;
+                    hits.insert(p);
                 }
             }
             MatchType::StartsWith(_) => {
                 if i.start() == 0 {
-                    hits += 1;
+                    hits.insert(p);
                 }
             }
         }
     }
-    hits
+    hits.len() as i64
 }
 
 #[cfg(test)]
@@ -748,7 +754,7 @@ mod tests {
         let j = "{
             \"Ex\": {
                 \"Name\": \"POWERSHELL.exe\",
-                \"Args\": \"one$two$three$four$five$six$seven$eight$9$10$11$12$13$14$15$16$17$18$19$20$21$22$\"
+                \"Args\": \"one$two$three$four$five$six$six$seven$eight$9$10$11$12$13$14$15$16$17$18$19$20$21$22$\"
             }
         }";
         let data: serde_json::Value = serde_json::from_str(&j).unwrap();
