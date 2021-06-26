@@ -3,7 +3,7 @@ use std::iter::Iterator;
 use std::iter::Peekable;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
-use regex::{Regex, RegexSet};
+use regex::{Regex, RegexBuilder, RegexSet, RegexSetBuilder};
 use serde_yaml::{Mapping, Value as Yaml};
 use tracing::debug;
 
@@ -888,17 +888,25 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                 // FIXME: Yes we waste time rebuilding the regex multiple times, but this is not
                 // really an issue atm, or is it even an issue at all?
                 if !regex_set.is_empty() {
+                    // TODO: Everything is forced lowercase, to match what we do in identifiers, as noted there
+                    // this should be optional...
                     if regex_set.len() == 1 {
                         group.push(Expression::Search(
                             Search::Regex(
-                                Regex::new(&regex_set[0]).expect("could not build regex"),
+                                RegexBuilder::new(&regex_set[0])
+                                    .case_insensitive(true)
+                                    .build()
+                                    .expect("could not build regex"),
                             ),
                             f.to_owned(),
                         ));
                     } else {
                         group.push(Expression::Search(
                             Search::RegexSet(
-                                RegexSet::new(regex_set).expect("could not build regex set"),
+                                RegexSetBuilder::new(regex_set)
+                                    .case_insensitive(true)
+                                    .build()
+                                    .expect("could not build regex set"),
                             ),
                             f.to_owned(),
                         ));
