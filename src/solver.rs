@@ -377,6 +377,42 @@ fn solve_expression(
                             return SolverResult::Missing;
                         }
                     }
+                } else if let Expression::Search(Search::RegexSet(s), i) = expression {
+                    let value = match document.find(i) {
+                        Some(v) => v,
+                        None => {
+                            debug!("evaluating missing, field not found for {}", expression);
+                            return SolverResult::Missing;
+                        }
+                    };
+                    match value {
+                        Value::String(ref x) => {
+                            if s.matches(x).len() != s.patterns().len() {
+                                return SolverResult::False;
+                            }
+                        }
+                        Value::Array(x) => {
+                            let mut found = false;
+                            for v in x.iter() {
+                                if let Some(x) = v.as_str() {
+                                    if s.matches(x).len() == s.patterns().len() {
+                                        found = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if !found {
+                                return SolverResult::False;
+                            }
+                        }
+                        _ => {
+                            debug!(
+                                "evaluating false, field is not an array of strings, or a string for {}",
+                                expression
+                            );
+                            return SolverResult::Missing;
+                        }
+                    }
                 } else {
                     match solve_expression(expression, identifiers, document) {
                         SolverResult::True => {}
@@ -420,6 +456,43 @@ fn solve_expression(
                             for v in x.iter() {
                                 if let Some(x) = v.as_str() {
                                     let hits = slow_aho(a, m, x);
+                                    if count + hits >= c {
+                                        return SolverResult::True;
+                                    } else if hits > max {
+                                        max = hits;
+                                    }
+                                }
+                            }
+                            count += max;
+                        }
+                        _ => {
+                            debug!(
+                                "evaluating false, field is not an array of strings, or a string for {}",
+                                expression
+                            );
+                            return SolverResult::Missing;
+                        }
+                    }
+                } else if let Expression::Search(Search::RegexSet(s), i) = expression {
+                    let value = match document.find(i) {
+                        Some(v) => v,
+                        None => {
+                            debug!("evaluating missing, field not found for {}", expression);
+                            return SolverResult::Missing;
+                        }
+                    };
+                    match value {
+                        Value::String(ref x) => {
+                            count += s.matches(x).len() as i64;
+                            if count >= c {
+                                return SolverResult::True;
+                            }
+                        }
+                        Value::Array(x) => {
+                            let mut max = 0;
+                            for v in x.iter() {
+                                if let Some(x) = v.as_str() {
+                                    let hits = s.matches(x).len() as i64;
                                     if count + hits >= c {
                                         return SolverResult::True;
                                     } else if hits > max {
@@ -559,6 +632,11 @@ fn search(kind: &Search, value: &str) -> SolverResult {
             }
         }
         Search::Regex(ref i) => {
+            if i.is_match(value) {
+                return SolverResult::True;
+            }
+        }
+        Search::RegexSet(ref i) => {
             if i.is_match(value) {
                 return SolverResult::True;
             }

@@ -3,7 +3,7 @@ use std::iter::Iterator;
 use std::iter::Peekable;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
-use regex::Regex;
+use regex::{Regex, RegexSet};
 use serde_yaml::{Mapping, Value as Yaml};
 use tracing::debug;
 
@@ -31,6 +31,7 @@ pub enum Search {
     EndsWith(String),
     Exact(String),
     Regex(Regex),
+    RegexSet(RegexSet),
     StartsWith(String),
 }
 impl fmt::Display for Search {
@@ -41,6 +42,7 @@ impl fmt::Display for Search {
             Self::EndsWith(s) => write!(f, "ends_with({})", s),
             Self::Exact(s) => write!(f, "exact({})", s),
             Self::Regex(s) => write!(f, "regex({})", s),
+            Self::RegexSet(s) => write!(f, "regex_set({:?})", s.patterns()),
             Self::StartsWith(s) => write!(f, "starts_with({})", s),
         }
     }
@@ -53,6 +55,7 @@ impl PartialEq for Search {
             (Search::EndsWith(s0), Search::EndsWith(s1)) => s0 == s1,
             (Search::Exact(s0), Search::Exact(s1)) => s0 == s1,
             (Search::Regex(r0), Search::Regex(r1)) => r0.as_str() == r1.as_str(),
+            (Search::RegexSet(r0), Search::RegexSet(r1)) => r0.patterns() == r1.patterns(),
             (Search::StartsWith(s0), Search::StartsWith(s1)) => s0 == s1,
             (_, _) => false,
         }
@@ -756,7 +759,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                 let mut starts_with: Vec<Identifier> = vec![];
                 let mut ends_with: Vec<Identifier> = vec![];
                 let mut contains: Vec<Identifier> = vec![];
-                let mut regex: Vec<Regex> = vec![];
+                let mut regex_set: Vec<String> = vec![];
                 let mut rest: Vec<Expression> = vec![]; // NOTE: Don't care about speed of numbers atm
                 for value in s {
                     let identifier = match value {
@@ -802,7 +805,10 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         Identifier::StartsWith(_) => starts_with.push(identifier),
                         Identifier::EndsWith(_) => ends_with.push(identifier),
                         Identifier::Contains(_) => contains.push(identifier),
-                        Identifier::Regex(r) => regex.push(r),
+                        //Identifier::Regex(r) => regex.push(r),
+                        Identifier::Regex(r) => {
+                            regex_set.push(r.as_str().to_owned());
+                        }
                         Identifier::Equal(i) => rest.push(Expression::BooleanExpression(
                             Box::new(e.clone()),
                             BoolSym::Equal,
@@ -879,11 +885,25 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         f.to_owned(),
                     ));
                 }
-                group.extend(
-                    regex
-                        .into_iter()
-                        .map(|r| Expression::Search(Search::Regex(r), f.to_owned())),
-                );
+                // FIXME: Yes we waste time rebuilding the regex multiple times, but this is not
+                // really an issue atm, or is it even an issue at all?
+                if !regex_set.is_empty() {
+                    if regex_set.len() == 1 {
+                        group.push(Expression::Search(
+                            Search::Regex(
+                                Regex::new(&regex_set[0]).expect("could not build regex"),
+                            ),
+                            f.to_owned(),
+                        ));
+                    } else {
+                        group.push(Expression::Search(
+                            Search::RegexSet(
+                                RegexSet::new(regex_set).expect("could not build regex set"),
+                            ),
+                            f.to_owned(),
+                        ));
+                    }
+                }
                 group.extend(rest);
                 if let Expression::Match(m, _) = e {
                     expressions.push(Expression::Match(
