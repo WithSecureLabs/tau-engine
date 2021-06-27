@@ -1,3 +1,4 @@
+use std::convert::TryFrom;
 use std::fmt;
 use std::iter::Iterator;
 use std::iter::Peekable;
@@ -21,7 +22,7 @@ pub enum MatchType {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Match {
     All,
-    Of(i64),
+    Of(u64),
 }
 
 #[derive(Clone, Debug)]
@@ -486,7 +487,15 @@ where
                         }
                         let count = match it.next() {
                             Some(t) => match t {
-                                Token::Integer(c) => c,
+                                Token::Integer(c) => match u64::try_from(*c) {
+                                    Ok(u) => u,
+                                    Err(_) => {
+                                        return Err(crate::error::parse_invalid_token(format!(
+                                            "NUD expected positive integer - '{:?}'",
+                                            t
+                                        )));
+                                    }
+                                },
                                 _ => {
                                     return Err(crate::error::parse_invalid_token(format!(
                                         "NUD expected integer - '{:?}'",
@@ -517,7 +526,7 @@ where
                         }
                         match *token {
                             Token::Identifier(ref s) => Ok(Expression::Match(
-                                Match::Of(*count),
+                                Match::Of(count),
                                 Box::new(Expression::Identifier(s.to_string())),
                             )),
                             _ => Err(crate::error::parse_invalid_token(

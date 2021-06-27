@@ -351,8 +351,7 @@ fn solve_expression(
                     };
                     match value {
                         Value::String(ref x) => {
-                            println!("calling slow");
-                            if slow_aho(a, m, x) != m.len() as i64 {
+                            if slow_aho(a, m, x) != m.len() as u64 {
                                 return SolverResult::False;
                             }
                         }
@@ -360,7 +359,7 @@ fn solve_expression(
                             let mut found = false;
                             for v in x.iter() {
                                 if let Some(x) = v.as_str() {
-                                    if slow_aho(a, m, x) == m.len() as i64 {
+                                    if slow_aho(a, m, x) == m.len() as u64 {
                                         found = true;
                                         break;
                                     }
@@ -388,7 +387,11 @@ fn solve_expression(
                     };
                     match value {
                         Value::String(ref x) => {
-                            if s.matches(x).len() != s.patterns().len() {
+                            let mut hits = 0;
+                            for _ in s.matches(x).iter() {
+                                hits += 1;
+                            }
+                            if hits != s.patterns().len() {
                                 return SolverResult::False;
                             }
                         }
@@ -396,7 +399,11 @@ fn solve_expression(
                             let mut found = false;
                             for v in x.iter() {
                                 if let Some(x) = v.as_str() {
-                                    if s.matches(x).len() == s.patterns().len() {
+                                    let mut hits = 0;
+                                    for _ in s.matches(x).iter() {
+                                        hits += 1;
+                                    }
+                                    if hits == s.patterns().len() {
                                         found = true;
                                         break;
                                     }
@@ -484,7 +491,9 @@ fn solve_expression(
                     };
                     match value {
                         Value::String(ref x) => {
-                            count += s.matches(x).len() as i64;
+                            for _ in s.matches(x).iter() {
+                                count += 1;
+                            }
                             if count >= c {
                                 return SolverResult::True;
                             }
@@ -493,7 +502,10 @@ fn solve_expression(
                             let mut max = 0;
                             for v in x.iter() {
                                 if let Some(x) = v.as_str() {
-                                    let hits = s.matches(x).len() as i64;
+                                    let mut hits = 0;
+                                    for _ in s.matches(x).iter() {
+                                        hits += 1;
+                                    }
                                     if count + hits >= c {
                                         return SolverResult::True;
                                     } else if hits > max {
@@ -670,34 +682,66 @@ fn search(kind: &Search, value: &str) -> SolverResult {
 }
 
 #[inline]
-fn slow_aho(a: &AhoCorasick, m: &Vec<MatchType>, value: &str) -> i64 {
-    // FIXME: We need to find a way to do this with zero allocations, for now lets just use a
-    // HashSet and make life easy...
-    let mut hits = std::collections::HashSet::new();
-    for i in a.find_overlapping_iter(value) {
-        let p = i.pattern();
-        match m[p] {
-            MatchType::Contains(_) => {
-                hits.insert(p);
-            }
-            MatchType::EndsWith(_) => {
-                if i.end() == value.len() {
-                    hits.insert(p);
+fn slow_aho(a: &AhoCorasick, m: &Vec<MatchType>, value: &str) -> u64 {
+    // TODO: Benchmark properly to work out whether the bitmap really is better on average
+    let len = m.len();
+    if len < 64 {
+        let mut map = 0;
+        for i in a.find_overlapping_iter(value) {
+            let p = i.pattern();
+            match m[p] {
+                MatchType::Contains(_) => {
+                    map |= 1 << p;
                 }
-            }
-            MatchType::Exact(_) => {
-                if i.start() == 0 && i.end() == value.len() {
-                    hits.insert(p);
+                MatchType::EndsWith(_) => {
+                    if i.end() == value.len() {
+                        map |= 1 << p;
+                    }
                 }
-            }
-            MatchType::StartsWith(_) => {
-                if i.start() == 0 {
-                    hits.insert(p);
+                MatchType::Exact(_) => {
+                    if i.start() == 0 && i.end() == value.len() {
+                        map |= 1 << p;
+                    }
+                }
+                MatchType::StartsWith(_) => {
+                    if i.start() == 0 {
+                        map |= 1 << p;
+                    }
                 }
             }
         }
+        let mut hits = 0;
+        for i in 0..len {
+            hits += (map >> i) & 0x1;
+        }
+        hits
+    } else {
+        let mut hits = std::collections::HashSet::with_capacity(len);
+        for i in a.find_overlapping_iter(value) {
+            let p = i.pattern();
+            match m[p] {
+                MatchType::Contains(_) => {
+                    hits.insert(p);
+                }
+                MatchType::EndsWith(_) => {
+                    if i.end() == value.len() {
+                        hits.insert(p);
+                    }
+                }
+                MatchType::Exact(_) => {
+                    if i.start() == 0 && i.end() == value.len() {
+                        hits.insert(p);
+                    }
+                }
+                MatchType::StartsWith(_) => {
+                    if i.start() == 0 {
+                        hits.insert(p);
+                    }
+                }
+            }
+        }
+        hits.len() as u64
     }
-    hits.len() as i64
 }
 
 #[cfg(test)]
@@ -738,8 +782,8 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "json")]
     #[test]
+    #[cfg(feature = "json")]
     fn solve_all() {
         // Expression
         let expression = parser::parse(&"A".to_string().tokenise().unwrap()).unwrap();
@@ -764,6 +808,37 @@ mod tests {
             solve_expression(&expression, &identifiers, data.as_object().unwrap()),
             SolverResult::True
         );
+    }
+
+    #[bench]
+    #[cfg(feature = "benchmarks")]
+    fn bench_solve_all(b: &mut Bencher) {
+        // Expression
+        let expression = parser::parse(&"A".to_string().tokenise().unwrap()).unwrap();
+
+        // Identifiers
+        let mut identifiers: HashMap<String, Expression> = HashMap::new();
+        let y = "all(Ex.Args):\n  - '?(([^\\$\n])+\\$){22,}'\n  - '*five*'\n  - '*six*'\nEx.Name: '?powershell.exe'";
+        let v: serde_yaml::Value = serde_yaml::from_str(&y).unwrap();
+        identifiers.insert("A".to_string(), parser::parse_identifier(&v).unwrap());
+
+        // Fake data
+        let j = "{
+            \"Ex\": {
+                \"Name\": \"POWERSHELL.exe\",
+                \"Args\": \"one$two$three$four$five$six$six$seven$eight$9$10$11$12$13$14$15$16$17$18$19$20$21$22$\"
+            }
+        }";
+        let data: serde_json::Value = serde_json::from_str(&j).unwrap();
+
+        // Assert it cause it could be broken!
+        assert_eq!(
+            solve_expression(&expression, &identifiers, data.as_object().unwrap()),
+            SolverResult::True
+        );
+
+        // Benchmark
+        b.iter(|| solve_expression(&expression, &identifiers, data.as_object().unwrap()));
     }
 
     #[bench]
