@@ -892,16 +892,14 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                     if let Pattern::Exact(s) = i.pattern {
                         // NOTE: Do not allow empty string into the needles as it causes massive slow down,
                         // don't ask me why I have not looked into it!
-                        if s == "" {
+                        if s.is_empty() {
                             group.push(Expression::Search(Search::Exact(s), f.to_owned()));
+                        } else if i.ignore_case {
+                            icontext.push(MatchType::Exact(s.clone()));
+                            ineedles.push(s);
                         } else {
-                            if i.ignore_case {
-                                icontext.push(MatchType::Exact(s.clone()));
-                                ineedles.push(s);
-                            } else {
-                                context.push(MatchType::Exact(s.clone()));
-                                needles.push(s);
-                            }
+                            context.push(MatchType::Exact(s.clone()));
+                            needles.push(s);
                         }
                     }
                 }

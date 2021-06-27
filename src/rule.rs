@@ -100,10 +100,10 @@ impl<'de> Deserialize<'de> for Detection {
                     }
                 };
                 Ok(Detection {
-                    identifiers,
-                    identifiers_raw,
                     expression,
+                    identifiers,
                     expression_raw,
+                    identifiers_raw,
                 })
             }
         }

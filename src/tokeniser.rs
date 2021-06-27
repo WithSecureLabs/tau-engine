@@ -204,7 +204,7 @@ impl Tokeniser for String {
                 }
             }
         }
-        debug!("tokenised '{}' into '{:?}'", self, tokens.clone());
+        debug!("tokenised '{}' into '{:?}'", self, tokens);
 
         Ok(tokens)
     }

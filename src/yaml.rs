@@ -38,7 +38,7 @@ impl Object for Mapping {
     #[inline]
     fn keys(&self) -> Vec<Cow<'_, str>> {
         self.iter()
-            .filter_map(|(k, _)| k.as_value().to_string().map(|s| Cow::Owned(s)))
+            .filter_map(|(k, _)| k.as_value().to_string().map(Cow::Owned))
             .collect()
     }
 

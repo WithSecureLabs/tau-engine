@@ -164,8 +164,8 @@ fn solve_expression(
                                 }
                             }
                         }
-                        Expression::Cast(c, MiscSym::Int) => {
-                            let i = match document.find(c) {
+                        Expression::Cast(field, MiscSym::Int) => {
+                            let i = match document.find(field) {
                                 Some(i) => i,
                                 None => {
                                     debug!(
@@ -224,8 +224,8 @@ fn solve_expression(
                                 }
                             }
                         }
-                        Expression::Cast(c, MiscSym::Int) => {
-                            let i = match document.find(c) {
+                        Expression::Cast(field, MiscSym::Int) => {
+                            let i = match document.find(field) {
                                 Some(i) => i,
                                 None => {
                                     debug!(
@@ -433,7 +433,7 @@ fn solve_expression(
         }
         Expression::Match(Match::Of(c), ref e) => {
             let (_, group) = match **e {
-                Expression::Identifier(ref i) => match identifiers.get(i) {
+                Expression::Identifier(ref identifier) => match identifiers.get(identifier) {
                     Some(Expression::BooleanGroup(o, g)) => (o, g),
                     _ => unreachable!(),
                 },
@@ -560,9 +560,8 @@ fn solve_expression(
                 Value::Array(a) => {
                     for v in a.iter() {
                         if let Some(x) = v.as_object() {
-                            match solve_expression(e, identifiers, &x) {
-                                SolverResult::True => return SolverResult::True,
-                                _ => {}
+                            if solve_expression(e, identifiers, &x) == SolverResult::True {
+                                return SolverResult::True;
                             }
                         }
                     }
@@ -591,13 +590,10 @@ fn solve_expression(
                     let mut res = SolverResult::False;
                     for v in a.iter() {
                         if let Some(x) = v.as_str() {
-                            match search(s, x) {
-                                SolverResult::True => {
-                                    res = SolverResult::True;
-                                    break;
-                                }
-                                _ => {}
-                            };
+                            if search(s, x) == SolverResult::True {
+                                res = SolverResult::True;
+                                break;
+                            }
                         }
                     }
                     res
@@ -682,7 +678,7 @@ fn search(kind: &Search, value: &str) -> SolverResult {
 }
 
 #[inline]
-fn slow_aho(a: &AhoCorasick, m: &Vec<MatchType>, value: &str) -> u64 {
+fn slow_aho(a: &AhoCorasick, m: &[MatchType], value: &str) -> u64 {
     // TODO: Benchmark properly to work out whether the bitmap really is better on average
     let len = m.len();
     if len < 64 {

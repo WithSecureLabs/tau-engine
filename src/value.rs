@@ -16,66 +16,42 @@ pub enum Value<'a> {
 impl<'a> Value<'a> {
     #[inline]
     pub fn is_array(&self) -> bool {
-        match self {
-            Self::Array(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Array(_))
     }
 
     #[inline]
     pub fn is_bool(&self) -> bool {
-        match self {
-            Self::Bool(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Bool(_))
     }
 
     #[inline]
     pub fn is_f64(&self) -> bool {
-        match self {
-            Self::Float(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Float(_))
     }
 
     #[inline]
     pub fn is_i64(&self) -> bool {
-        match self {
-            Self::Int(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Int(_))
     }
 
     #[inline]
     pub fn is_null(&self) -> bool {
-        match self {
-            Self::Null => true,
-            _ => false,
-        }
+        matches!(self, Self::Null)
     }
 
     #[inline]
     pub fn is_object(&self) -> bool {
-        match self {
-            Self::Object(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Object(_))
     }
 
     #[inline]
     pub fn is_string(&self) -> bool {
-        match self {
-            Self::String(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::String(_))
     }
 
     #[inline]
     pub fn is_u64(&self) -> bool {
-        match self {
-            Self::UInt(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::UInt(_))
     }
 
     #[inline]
@@ -280,6 +256,7 @@ impl_as_value_uint!(u32);
 impl_as_value_uint!(u64);
 impl_as_value_uint!(usize);
 
+#[allow(clippy::len_without_is_empty)]
 pub trait Array {
     fn iter(&self) -> Box<dyn Iterator<Item = Value<'_>> + '_>;
     fn len(&self) -> usize;
@@ -315,6 +292,7 @@ where
     }
 }
 
+#[allow(clippy::len_without_is_empty)]
 pub trait Object {
     fn find(&self, key: &str) -> Option<Value<'_>> {
         let mut v: Option<Value<'_>> = None;
@@ -332,7 +310,7 @@ pub trait Object {
                 }
             }
         }
-        return v;
+        v
     }
     fn get(&self, key: &str) -> Option<Value<'_>>;
     fn keys(&self) -> Vec<Cow<'_, str>>;

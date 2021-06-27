@@ -26,54 +26,43 @@ pub trait IdentifierParser {
 
 impl IdentifierParser for String {
     fn into_identifier(self) -> crate::Result<Identifier> {
-        let (insensitive, string) = if self.starts_with('i') {
-            if cfg!(feature = "ignore_case") {
-                (true, &self[..])
-            } else {
-                (true, &self[1..])
-            }
+        let (insensitive, string) = if cfg!(feature = "ignore_case") {
+            (true, &self[..])
+        } else if let Some(s) = self.strip_prefix('i') {
+            (true, s)
         } else {
-            if cfg!(feature = "ignore_case") {
-                (true, &self[..])
-            } else {
-                (false, &self[..])
-            }
+            (false, &self[..])
         };
-        let pattern = if string.starts_with('?') {
+        let pattern = if let Some(s) = string.strip_prefix('?') {
             Pattern::Regex(
-                RegexBuilder::new(&string[1..])
+                RegexBuilder::new(s)
                     .case_insensitive(insensitive)
                     .build()
                     .map_err(crate::error::parse_invalid_ident)?,
             )
-        } else if string.starts_with(">=") {
+        } else if let Some(s) = string.strip_prefix(">=") {
             Pattern::GreaterThanOrEqual(
-                string[2..]
-                    .parse::<i64>()
+                s.parse::<i64>()
                     .map_err(crate::error::parse_invalid_ident)?,
             )
-        } else if string.starts_with('>') {
+        } else if let Some(s) = string.strip_prefix('>') {
             Pattern::GreaterThan(
-                string[1..]
-                    .parse::<i64>()
+                s.parse::<i64>()
                     .map_err(crate::error::parse_invalid_ident)?,
             )
-        } else if string.starts_with("<=") {
+        } else if let Some(s) = string.strip_prefix("<=") {
             Pattern::LessThanOrEqual(
-                string[2..]
-                    .parse::<i64>()
+                s.parse::<i64>()
                     .map_err(crate::error::parse_invalid_ident)?,
             )
-        } else if string.starts_with('<') {
+        } else if let Some(s) = string.strip_prefix('<') {
             Pattern::LessThan(
-                string[1..]
-                    .parse::<i64>()
+                s.parse::<i64>()
                     .map_err(crate::error::parse_invalid_ident)?,
             )
-        } else if string.starts_with('=') {
+        } else if let Some(s) = string.strip_prefix('=') {
             Pattern::Equal(
-                string[1..]
-                    .parse::<i64>()
+                s.parse::<i64>()
                     .map_err(crate::error::parse_invalid_ident)?,
             )
         } else if string.starts_with('*') && string.ends_with('*') {
@@ -83,18 +72,18 @@ impl IdentifierParser for String {
                 string[1..string.len() - 1].to_string()
             };
             Pattern::Contains(s)
-        } else if string.starts_with('*') {
+        } else if let Some(s) = string.strip_prefix('*') {
             let s = if insensitive {
-                string[1..].to_lowercase()
+                s.to_lowercase()
             } else {
-                string[1..].to_string()
+                s.to_string()
             };
             Pattern::EndsWith(s)
-        } else if string.ends_with('*') {
+        } else if let Some(s) = string.strip_suffix('*') {
             let s = if insensitive {
-                string[..string.len() - 1].to_lowercase()
+                s.to_lowercase()
             } else {
-                string[..string.len() - 1].to_string()
+                s.to_string()
             };
             Pattern::StartsWith(s)
         } else if (string.starts_with('"') && string.ends_with('"'))
