@@ -721,7 +721,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         f.to_owned(),
                     ),
                     Pattern::Exact(c) => Expression::Search(
-                        if identifier.ignore_case {
+                        if c != "" && identifier.ignore_case {
                             Search::AhoCorasick(
                                 Box::new(
                                     AhoCorasickBuilder::new()

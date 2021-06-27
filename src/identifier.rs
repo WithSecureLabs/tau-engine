@@ -27,7 +27,11 @@ pub trait IdentifierParser {
 impl IdentifierParser for String {
     fn into_identifier(self) -> crate::Result<Identifier> {
         let (insensitive, string) = if self.starts_with('i') {
-            (true, &self[1..])
+            if cfg!(feature = "ignore_case") {
+                (true, &self[..])
+            } else {
+                (true, &self[1..])
+            }
         } else {
             if cfg!(feature = "ignore_case") {
                 (true, &self[..])
