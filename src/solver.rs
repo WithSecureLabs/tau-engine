@@ -762,7 +762,7 @@ mod tests {
 
         // Identifiers
         let mut identifiers: HashMap<String, Expression> = HashMap::new();
-        let y = "of(Ex.Args, 3):\n- '?(([^\\$\n])+\\$){22,}'\n- '*five*'\n- '*six*'\n- '*foo*'\nEx.Name: '?powershell.exe'";
+        let y = "of(Ex.Args, 3):\n- '?(([^\\$\n])+\\$){22,}'\n- '*five*'\n- '*six*'\n- '*foo*'\nEx.Name: 'i?powershell.exe'";
         let v: serde_yaml::Value = serde_yaml::from_str(&y).unwrap();
         identifiers.insert("A".to_string(), parser::parse_identifier(&v).unwrap());
 
@@ -790,7 +790,7 @@ mod tests {
 
         // Identifiers
         let mut identifiers: HashMap<String, Expression> = HashMap::new();
-        let y = "all(Ex.Args):\n  - '?(([^\\$\n])+\\$){22,}'\n  - '*five*'\n  - '*six*'\nEx.Name: '?powershell.exe'";
+        let y = "all(Ex.Args):\n  - '?(([^\\$\n])+\\$){22,}'\n  - '*five*'\n  - '*six*'\nEx.Name: 'i?powershell.exe'";
         let v: serde_yaml::Value = serde_yaml::from_str(&y).unwrap();
         identifiers.insert("A".to_string(), parser::parse_identifier(&v).unwrap());
 
@@ -818,7 +818,7 @@ mod tests {
 
         // Identifiers
         let mut identifiers: HashMap<String, Expression> = HashMap::new();
-        let y = "all(Ex.Args):\n  - '?(([^\\$\n])+\\$){22,}'\n  - '*five*'\n  - '*six*'\nEx.Name: '?powershell.exe'";
+        let y = "all(Ex.Args):\n  - '?(([^\\$\n])+\\$){22,}'\n  - '*five*'\n  - '*six*'\nEx.Name: 'i?powershell.exe'";
         let v: serde_yaml::Value = serde_yaml::from_str(&y).unwrap();
         identifiers.insert("A".to_string(), parser::parse_identifier(&v).unwrap());
 
@@ -849,7 +849,7 @@ mod tests {
 
         // Identifiers
         let mut identifiers: HashMap<String, Expression> = HashMap::new();
-        let y = "Ex.Args: '?(([^\\$\n])+\\$){22,}'\nEx.Name: '?powershell.exe'";
+        let y = "Ex.Args: '?(([^\\$\n])+\\$){22,}'\nEx.Name: 'i?powershell.exe'";
         let v: serde_yaml::Value = serde_yaml::from_str(&y).unwrap();
         identifiers.insert("A".to_string(), parser::parse_identifier(&v).unwrap());
 
@@ -880,7 +880,7 @@ mod tests {
 
         // Identifiers
         let mut identifiers: HashMap<String, Expression> = HashMap::new();
-        let y = "Mem.HiddenDllType: ['adcsa', 'fasdfas', 'reflective_load*']\nEx.Name: 'powershell.exe'";
+        let y = "Mem.HiddenDllType: ['adcsa', 'fasdfas', 'reflective_load*']\nEx.Name: 'ipowershell.exe'";
         let v: serde_yaml::Value = serde_yaml::from_str(&y).unwrap();
         identifiers.insert("A".to_string(), parser::parse_identifier(&v).unwrap());
 

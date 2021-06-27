@@ -19,4 +19,5 @@ tracing = "0.1"
 
 [features]
 benchmarks = []
+ignore_case = []
 json = ["serde_json"]

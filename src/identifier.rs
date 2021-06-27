@@ -1,7 +1,7 @@
 use regex::{Regex, RegexBuilder};
 
 #[derive(Clone, Debug)]
-pub enum Identifier {
+pub enum Pattern {
     Contains(String),
     Equal(i64),
     EndsWith(String),
@@ -14,68 +14,105 @@ pub enum Identifier {
     StartsWith(String),
 }
 
+#[derive(Clone, Debug)]
+pub struct Identifier {
+    pub ignore_case: bool,
+    pub pattern: Pattern,
+}
+
 pub trait IdentifierParser {
     fn into_identifier(self) -> crate::Result<Identifier>;
 }
 
 impl IdentifierParser for String {
-    // TODO: Everything is forced lowercase atm, but this should be OPTIONAL...
     fn into_identifier(self) -> crate::Result<Identifier> {
-        if self.starts_with('?') {
-            Ok(Identifier::Regex(
-                RegexBuilder::new(&self.as_str()[1..])
-                    .case_insensitive(true)
+        let (insensitive, string) = if self.starts_with('i') {
+            (true, &self[1..])
+        } else {
+            if cfg!(feature = "ignore_case") {
+                (true, &self[..])
+            } else {
+                (false, &self[..])
+            }
+        };
+        let pattern = if string.starts_with('?') {
+            Pattern::Regex(
+                RegexBuilder::new(&string[1..])
+                    .case_insensitive(insensitive)
                     .build()
                     .map_err(crate::error::parse_invalid_ident)?,
-            ))
-        } else if self.starts_with(">=") {
-            Ok(Identifier::GreaterThanOrEqual(
-                self.as_str()[2..]
+            )
+        } else if string.starts_with(">=") {
+            Pattern::GreaterThanOrEqual(
+                string[2..]
                     .parse::<i64>()
                     .map_err(crate::error::parse_invalid_ident)?,
-            ))
-        } else if self.starts_with('>') {
-            Ok(Identifier::GreaterThan(
-                self.as_str()[1..]
+            )
+        } else if string.starts_with('>') {
+            Pattern::GreaterThan(
+                string[1..]
                     .parse::<i64>()
                     .map_err(crate::error::parse_invalid_ident)?,
-            ))
-        } else if self.starts_with("<=") {
-            Ok(Identifier::LessThanOrEqual(
-                self.as_str()[2..]
+            )
+        } else if string.starts_with("<=") {
+            Pattern::LessThanOrEqual(
+                string[2..]
                     .parse::<i64>()
                     .map_err(crate::error::parse_invalid_ident)?,
-            ))
-        } else if self.starts_with('<') {
-            Ok(Identifier::LessThan(
-                self.as_str()[1..]
+            )
+        } else if string.starts_with('<') {
+            Pattern::LessThan(
+                string[1..]
                     .parse::<i64>()
                     .map_err(crate::error::parse_invalid_ident)?,
-            ))
-        } else if self.starts_with('=') {
-            Ok(Identifier::Equal(
-                self.as_str()[1..]
+            )
+        } else if string.starts_with('=') {
+            Pattern::Equal(
+                string[1..]
                     .parse::<i64>()
                     .map_err(crate::error::parse_invalid_ident)?,
-            ))
-        } else if self.starts_with('*') && self.ends_with('*') {
-            Ok(Identifier::Contains(
-                self.as_str()[1..self.len() - 1].to_lowercase(),
-            ))
-        } else if self.starts_with('*') {
-            Ok(Identifier::EndsWith(self.as_str()[1..].to_lowercase()))
-        } else if self.ends_with('*') {
-            Ok(Identifier::StartsWith(
-                self.as_str()[..self.len() - 1].to_lowercase(),
-            ))
-        } else if (self.starts_with('"') && self.ends_with('"'))
-            || (self.starts_with('\'') && self.ends_with('\''))
+            )
+        } else if string.starts_with('*') && string.ends_with('*') {
+            let s = if insensitive {
+                string[1..string.len() - 1].to_lowercase()
+            } else {
+                string[1..string.len() - 1].to_string()
+            };
+            Pattern::Contains(s)
+        } else if string.starts_with('*') {
+            let s = if insensitive {
+                string[1..].to_lowercase()
+            } else {
+                string[1..].to_string()
+            };
+            Pattern::EndsWith(s)
+        } else if string.ends_with('*') {
+            let s = if insensitive {
+                string[..string.len() - 1].to_lowercase()
+            } else {
+                string[..string.len() - 1].to_string()
+            };
+            Pattern::StartsWith(s)
+        } else if (string.starts_with('"') && string.ends_with('"'))
+            || (string.starts_with('\'') && string.ends_with('\''))
         {
-            Ok(Identifier::Exact(
-                self.as_str()[1..self.len() - 1].to_lowercase(),
-            ))
+            let s = if insensitive {
+                string[1..string.len() - 1].to_lowercase()
+            } else {
+                string[1..string.len() - 1].to_string()
+            };
+            Pattern::Exact(s)
         } else {
-            Ok(Identifier::Exact(self.to_lowercase()))
-        }
+            let s = if insensitive {
+                string.to_lowercase()
+            } else {
+                string.to_owned()
+            };
+            Pattern::Exact(s)
+        };
+        Ok(Identifier {
+            ignore_case: insensitive,
+            pattern,
+        })
     }
 }

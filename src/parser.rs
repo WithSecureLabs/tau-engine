@@ -4,11 +4,11 @@ use std::iter::Iterator;
 use std::iter::Peekable;
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
-use regex::{Regex, RegexBuilder, RegexSet, RegexSetBuilder};
+use regex::{Regex, RegexSet, RegexSetBuilder};
 use serde_yaml::{Mapping, Value as Yaml};
 use tracing::debug;
 
-use crate::identifier::{Identifier, IdentifierParser};
+use crate::identifier::{Identifier, IdentifierParser, Pattern};
 use crate::tokeniser::{BoolSym, DelSym, MatchSym, MiscSym, Token, Tokeniser};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -660,97 +660,103 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                 )));
             }
             Yaml::String(ref s) => {
-                let search = s.to_owned().into_identifier()?;
-                let expr = match search {
-                    Identifier::Equal(i) => Expression::BooleanExpression(
+                let identifier = s.to_owned().into_identifier()?;
+                let expr = match identifier.pattern {
+                    Pattern::Equal(i) => Expression::BooleanExpression(
                         Box::new(e.clone()),
                         BoolSym::Equal,
                         Box::new(Expression::Integer(i)),
                     ),
-                    Identifier::GreaterThan(i) => Expression::BooleanExpression(
+                    Pattern::GreaterThan(i) => Expression::BooleanExpression(
                         Box::new(e.clone()),
                         BoolSym::GreaterThan,
                         Box::new(Expression::Integer(i)),
                     ),
-                    Identifier::GreaterThanOrEqual(i) => Expression::BooleanExpression(
+                    Pattern::GreaterThanOrEqual(i) => Expression::BooleanExpression(
                         Box::new(e.clone()),
                         BoolSym::GreaterThanOrEqual,
                         Box::new(Expression::Integer(i)),
                     ),
-                    Identifier::LessThan(i) => Expression::BooleanExpression(
+                    Pattern::LessThan(i) => Expression::BooleanExpression(
                         Box::new(e.clone()),
                         BoolSym::LessThan,
                         Box::new(Expression::Integer(i)),
                     ),
-                    Identifier::LessThanOrEqual(i) => Expression::BooleanExpression(
+                    Pattern::LessThanOrEqual(i) => Expression::BooleanExpression(
                         Box::new(e.clone()),
                         BoolSym::LessThanOrEqual,
                         Box::new(Expression::Integer(i)),
                     ),
-                    Identifier::Regex(c) => Expression::Search(Search::Regex(c), f.to_owned()),
-                    // NOTE: Off because we want case insensitive everywhere...
-                    //Identifier::Contains(c) => {
-                    //    Expression::Search(Search::Contains(c), k.to_owned())
-                    //}
-                    //Identifier::EndsWith(c) => {
-                    //    Expression::Search(Search::EndsWith(c), k.to_owned())
-                    //}
-                    //Identifier::Exact(c) => Expression::Search(Search::Exact(c), k.to_owned()),
-                    //Identifier::StartsWith(c) => {
-                    //    Expression::Search(Search::StartsWith(c), k.to_owned())
-                    //}
-                    Identifier::Contains(c) => Expression::Search(
-                        Search::AhoCorasick(
-                            Box::new(
-                                AhoCorasickBuilder::new()
-                                    .ascii_case_insensitive(true) // XXX: This should be a setting
-                                    .dfa(true)
-                                    .build(vec![c.clone()]),
-                            ),
-                            vec![MatchType::Contains(c)],
-                        ),
+                    Pattern::Regex(c) => Expression::Search(Search::Regex(c), f.to_owned()),
+                    Pattern::Contains(c) => Expression::Search(
+                        if identifier.ignore_case {
+                            Search::AhoCorasick(
+                                Box::new(
+                                    AhoCorasickBuilder::new()
+                                        .ascii_case_insensitive(true)
+                                        .dfa(true)
+                                        .build(vec![c.clone()]),
+                                ),
+                                vec![MatchType::Contains(c)],
+                            )
+                        } else {
+                            Search::Contains(c)
+                        },
                         f.to_owned(),
                     ),
-                    Identifier::EndsWith(c) => Expression::Search(
-                        Search::AhoCorasick(
-                            Box::new(
-                                AhoCorasickBuilder::new()
-                                    .ascii_case_insensitive(true) // XXX: This should be a setting
-                                    .dfa(true)
-                                    .build(vec![c.clone()]),
-                            ),
-                            vec![MatchType::EndsWith(c)],
-                        ),
+                    Pattern::EndsWith(c) => Expression::Search(
+                        if identifier.ignore_case {
+                            Search::AhoCorasick(
+                                Box::new(
+                                    AhoCorasickBuilder::new()
+                                        .ascii_case_insensitive(true)
+                                        .dfa(true)
+                                        .build(vec![c.clone()]),
+                                ),
+                                vec![MatchType::EndsWith(c)],
+                            )
+                        } else {
+                            Search::EndsWith(c)
+                        },
                         f.to_owned(),
                     ),
-                    Identifier::Exact(c) => Expression::Search(
-                        Search::AhoCorasick(
-                            Box::new(
-                                AhoCorasickBuilder::new()
-                                    .ascii_case_insensitive(true) // XXX: This should be a setting
-                                    .dfa(true)
-                                    .build(vec![c.clone()]),
-                            ),
-                            vec![MatchType::Exact(c)],
-                        ),
+                    Pattern::Exact(c) => Expression::Search(
+                        if identifier.ignore_case {
+                            Search::AhoCorasick(
+                                Box::new(
+                                    AhoCorasickBuilder::new()
+                                        .ascii_case_insensitive(true)
+                                        .dfa(true)
+                                        .build(vec![c.clone()]),
+                                ),
+                                vec![MatchType::Exact(c)],
+                            )
+                        } else {
+                            Search::Exact(c)
+                        },
                         f.to_owned(),
                     ),
-                    Identifier::StartsWith(c) => Expression::Search(
-                        Search::AhoCorasick(
-                            Box::new(
-                                AhoCorasickBuilder::new()
-                                    .ascii_case_insensitive(true) // XXX: This should be a setting
-                                    .dfa(true)
-                                    .build(vec![c.clone()]),
-                            ),
-                            vec![MatchType::StartsWith(c)],
-                        ),
+                    Pattern::StartsWith(c) => Expression::Search(
+                        if identifier.ignore_case {
+                            Search::AhoCorasick(
+                                Box::new(
+                                    AhoCorasickBuilder::new()
+                                        .ascii_case_insensitive(true)
+                                        .dfa(true)
+                                        .build(vec![c.clone()]),
+                                ),
+                                vec![MatchType::StartsWith(c)],
+                            )
+                        } else {
+                            Search::StartsWith(c)
+                        },
                         f.to_owned(),
                     ),
                 };
                 expressions.push(expr);
             }
             Yaml::Sequence(ref s) => {
+                // TODO: This block could probably be cleaned...
                 // Now we need to be as fast as possible it turns out that builtin strings functions are
                 // fastest when we only need to check a single condition, when we need to check more that
                 // one AhoCorasick becomes the quicker, even though AC should be as fast as starts_with and
@@ -768,7 +774,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                 let mut starts_with: Vec<Identifier> = vec![];
                 let mut ends_with: Vec<Identifier> = vec![];
                 let mut contains: Vec<Identifier> = vec![];
-                let mut regex_set: Vec<String> = vec![];
+                let mut regex: Vec<Identifier> = vec![];
                 let mut rest: Vec<Expression> = vec![]; // NOTE: Don't care about speed of numbers atm
                 for value in s {
                     let identifier = match value {
@@ -809,38 +815,33 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                             )))
                         }
                     };
-                    match identifier {
-                        Identifier::Exact(_) => exact.push(identifier),
-                        Identifier::StartsWith(_) => starts_with.push(identifier),
-                        Identifier::EndsWith(_) => ends_with.push(identifier),
-                        Identifier::Contains(_) => contains.push(identifier),
-                        //Identifier::Regex(r) => regex.push(r),
-                        Identifier::Regex(r) => {
-                            regex_set.push(r.as_str().to_owned());
-                        }
-                        Identifier::Equal(i) => rest.push(Expression::BooleanExpression(
+                    match identifier.pattern {
+                        Pattern::Exact(_) => exact.push(identifier),
+                        Pattern::StartsWith(_) => starts_with.push(identifier),
+                        Pattern::EndsWith(_) => ends_with.push(identifier),
+                        Pattern::Contains(_) => contains.push(identifier),
+                        Pattern::Regex(_) => regex.push(identifier),
+                        Pattern::Equal(i) => rest.push(Expression::BooleanExpression(
                             Box::new(e.clone()),
                             BoolSym::Equal,
                             Box::new(Expression::Integer(i)),
                         )),
-                        Identifier::GreaterThan(i) => rest.push(Expression::BooleanExpression(
+                        Pattern::GreaterThan(i) => rest.push(Expression::BooleanExpression(
                             Box::new(e.clone()),
                             BoolSym::GreaterThan,
                             Box::new(Expression::Integer(i)),
                         )),
-                        Identifier::GreaterThanOrEqual(i) => {
-                            rest.push(Expression::BooleanExpression(
-                                Box::new(e.clone()),
-                                BoolSym::GreaterThanOrEqual,
-                                Box::new(Expression::Integer(i)),
-                            ))
-                        }
-                        Identifier::LessThan(i) => rest.push(Expression::BooleanExpression(
+                        Pattern::GreaterThanOrEqual(i) => rest.push(Expression::BooleanExpression(
+                            Box::new(e.clone()),
+                            BoolSym::GreaterThanOrEqual,
+                            Box::new(Expression::Integer(i)),
+                        )),
+                        Pattern::LessThan(i) => rest.push(Expression::BooleanExpression(
                             Box::new(e.clone()),
                             BoolSym::LessThan,
                             Box::new(Expression::Integer(i)),
                         )),
-                        Identifier::LessThanOrEqual(i) => rest.push(Expression::BooleanExpression(
+                        Pattern::LessThanOrEqual(i) => rest.push(Expression::BooleanExpression(
                             Box::new(e.clone()),
                             BoolSym::LessThanOrEqual,
                             Box::new(Expression::Integer(i)),
@@ -848,78 +849,143 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                     }
                 }
                 let mut group: Vec<Expression> = vec![];
-                let mut needles: Vec<String> = vec![];
                 let mut context: Vec<MatchType> = vec![];
+                let mut needles: Vec<String> = vec![];
+                let mut icontext: Vec<MatchType> = vec![];
+                let mut ineedles: Vec<String> = vec![];
+                let mut regex_set: Vec<Regex> = vec![];
+                let mut iregex_set: Vec<Regex> = vec![];
                 for i in starts_with.into_iter() {
-                    if let Identifier::StartsWith(i) = i {
-                        context.push(MatchType::StartsWith(i.to_string()));
-                        needles.push(i);
+                    if let Pattern::StartsWith(s) = i.pattern {
+                        if i.ignore_case {
+                            icontext.push(MatchType::StartsWith(s.clone()));
+                            ineedles.push(s);
+                        } else {
+                            context.push(MatchType::StartsWith(s.clone()));
+                            needles.push(s);
+                        }
                     }
                 }
                 for i in contains.into_iter() {
-                    if let Identifier::Contains(i) = i {
-                        context.push(MatchType::Contains(i.to_string()));
-                        needles.push(i);
+                    if let Pattern::Contains(s) = i.pattern {
+                        if i.ignore_case {
+                            icontext.push(MatchType::Contains(s.clone()));
+                            ineedles.push(s);
+                        } else {
+                            context.push(MatchType::Contains(s.clone()));
+                            needles.push(s);
+                        }
                     }
                 }
                 for i in ends_with.into_iter() {
-                    if let Identifier::EndsWith(i) = i {
-                        context.push(MatchType::EndsWith(i.to_string()));
-                        needles.push(i);
+                    if let Pattern::EndsWith(s) = i.pattern {
+                        if i.ignore_case {
+                            icontext.push(MatchType::EndsWith(s.clone()));
+                            ineedles.push(s);
+                        } else {
+                            context.push(MatchType::EndsWith(s.clone()));
+                            needles.push(s);
+                        }
                     }
                 }
                 for i in exact.into_iter() {
-                    if let Identifier::Exact(i) = i {
+                    if let Pattern::Exact(s) = i.pattern {
                         // NOTE: Do not allow empty string into the needles as it causes massive slow down,
                         // don't ask me why I have not looked into it!
-                        if i == "" {
-                            group.push(Expression::Search(Search::Exact(i), f.to_owned()));
+                        if s == "" {
+                            group.push(Expression::Search(Search::Exact(s), f.to_owned()));
                         } else {
-                            context.push(MatchType::Exact(i.to_string()));
-                            needles.push(i);
+                            if i.ignore_case {
+                                icontext.push(MatchType::Exact(s.clone()));
+                                ineedles.push(s);
+                            } else {
+                                context.push(MatchType::Exact(s.clone()));
+                                needles.push(s);
+                            }
+                        }
+                    }
+                }
+                for i in regex.into_iter() {
+                    if let Pattern::Regex(r) = i.pattern {
+                        if i.ignore_case {
+                            iregex_set.push(r);
+                        } else {
+                            regex_set.push(r);
                         }
                     }
                 }
                 if !needles.is_empty() {
+                    if needles.len() == 1 {
+                        let s = match context.into_iter().next().expect("failed to get context") {
+                            MatchType::Contains(c) => Search::Contains(c),
+                            MatchType::EndsWith(c) => Search::EndsWith(c),
+                            MatchType::Exact(c) => Search::Exact(c),
+                            MatchType::StartsWith(c) => Search::StartsWith(c),
+                        };
+                        group.push(Expression::Search(s, f.to_owned()));
+                    } else {
+                        group.push(Expression::Search(
+                            Search::AhoCorasick(
+                                Box::new(AhoCorasickBuilder::new().dfa(true).build(needles)),
+                                context,
+                            ),
+                            f.to_owned(),
+                        ));
+                    }
+                }
+                if !ineedles.is_empty() {
                     group.push(Expression::Search(
                         Search::AhoCorasick(
                             Box::new(
                                 AhoCorasickBuilder::new()
-                                    .ascii_case_insensitive(true) // XXX: This should be a setting
+                                    .ascii_case_insensitive(true)
                                     .dfa(true)
-                                    .build(needles),
+                                    .build(ineedles),
                             ),
-                            context,
+                            icontext,
                         ),
                         f.to_owned(),
                     ));
                 }
-                // FIXME: Yes we waste time rebuilding the regex multiple times, but this is not
-                // really an issue atm, or is it even an issue at all?
                 if !regex_set.is_empty() {
-                    // TODO: Everything is forced lowercase, to match what we do in identifiers, as noted there
-                    // this should be optional...
                     if regex_set.len() == 1 {
                         group.push(Expression::Search(
                             Search::Regex(
-                                RegexBuilder::new(&regex_set[0])
-                                    .case_insensitive(true)
-                                    .build()
-                                    .expect("could not build regex"),
+                                regex_set.into_iter().next().expect("failed to get regex"),
                             ),
                             f.to_owned(),
                         ));
                     } else {
                         group.push(Expression::Search(
                             Search::RegexSet(
-                                RegexSetBuilder::new(regex_set)
-                                    .case_insensitive(true)
-                                    .build()
-                                    .expect("could not build regex set"),
+                                RegexSetBuilder::new(
+                                    regex_set
+                                        .into_iter()
+                                        .map(|r| r.as_str().to_string())
+                                        .collect::<Vec<_>>(),
+                                )
+                                .build()
+                                .expect("could not build regex set"),
                             ),
                             f.to_owned(),
                         ));
                     }
+                }
+                if !iregex_set.is_empty() {
+                    group.push(Expression::Search(
+                        Search::RegexSet(
+                            RegexSetBuilder::new(
+                                iregex_set
+                                    .into_iter()
+                                    .map(|r| r.as_str().to_string())
+                                    .collect::<Vec<_>>(),
+                            )
+                            .case_insensitive(true)
+                            .build()
+                            .expect("could not build regex set"),
+                        ),
+                        f.to_owned(),
+                    ));
                 }
                 group.extend(rest);
                 if let Expression::Match(m, _) = e {
