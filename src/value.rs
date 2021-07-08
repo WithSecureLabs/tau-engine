@@ -430,6 +430,67 @@ where
 ///         2
 ///     }
 /// }
+/// ```
+///
+/// # Find
+///
+/// The `find` function allows for nested access from an `Object`. A default implementation is
+/// provided by the trait which assumes the key will split on `.`. This can be override if
+/// required. Below is an example of how find works for a complex data structure.
+///
+/// ```
+/// # use std::borrow::Cow;
+/// # use tau_engine::Value;
+/// use tau_engine::Object;
+///
+/// struct Foo {
+///     pub bar: String,
+/// }
+/// # impl Object for Foo {
+/// #     fn get(&self, key: &str) -> Option<Value<'_>> {
+/// #         match key {
+/// #             "bar" => Some(Value::String(Cow::Borrowed(&self.bar))),
+/// #             _ => None,
+/// #         }
+/// #     }
+/// #
+/// #     fn keys(&self) -> Vec<Cow<'_, str>> {
+/// #         ["bar"].iter().map(|s| Cow::Borrowed(*s)).collect()
+/// #     }
+/// #
+/// #     fn len(&self) -> usize {
+/// #         1
+/// #     }
+/// # }
+/// struct Baz {
+///     pub foo: Foo,
+/// }
+/// # impl Object for Baz {
+/// #     fn get(&self, key: &str) -> Option<Value<'_>> {
+/// #         match key {
+/// #             "foo" => Some(Value::Object(&self.foo)),
+/// #             _ => None,
+/// #         }
+/// #     }
+/// #
+/// #     fn keys(&self) -> Vec<Cow<'_, str>> {
+/// #         ["foo"].iter().map(|s| Cow::Borrowed(*s)).collect()
+/// #     }
+/// #
+/// #     fn len(&self) -> usize {
+/// #         1
+/// #     }
+/// # }
+/// let complex = Baz {
+///     foo: Foo {
+///         bar: "foobar".to_owned(),
+///     }
+/// };
+///
+/// let value = complex.find("foo.bar").unwrap();
+///
+/// assert_eq!(value.as_str(), Some("foobar"));
+/// ```
 #[allow(clippy::len_without_is_empty)]
 pub trait Object {
     fn find(&self, key: &str) -> Option<Value<'_>> {
