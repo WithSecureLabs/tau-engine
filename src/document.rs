@@ -1,5 +1,8 @@
 use crate::value::{Object, Value};
 
+/// Used to make a type document compliant.
+///
+///
 pub trait Document {
     fn find(&self, key: &str) -> Option<Value<'_>>;
 }

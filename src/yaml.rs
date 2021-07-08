@@ -1,3 +1,5 @@
+// Trait implementations that allow the solver to be gneric over serde_yaml's `Value`.
+
 use std::borrow::Cow;
 
 pub use serde_yaml::{Mapping, Number, Value as Yaml};
