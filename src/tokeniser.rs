@@ -4,14 +4,22 @@ use std::str::Chars;
 
 use tracing::debug;
 
+/// Boolean symbols.
 #[derive(Clone, Debug, PartialEq)]
 pub enum BoolSym {
+    /// `&&`
     And,
+    /// `==`
     Equal,
+    /// `>`
     GreaterThan,
+    /// `>=`
     GreaterThanOrEqual,
+    /// `<`
     LessThan,
+    /// `<=`
     LessThanOrEqual,
+    /// `||`
     Or,
 }
 impl fmt::Display for BoolSym {
@@ -28,17 +36,25 @@ impl fmt::Display for BoolSym {
     }
 }
 
+/// Delimiting symbols.
 #[derive(Clone, Debug, PartialEq)]
 pub enum DelSym {
+    /// `,`
     Comma,
+    /// `(`
     LeftParenthesis,
+    /// `)`
     RightParenthesis,
 }
 
+/// Miscellaneous Symbols.
 #[derive(Clone, Debug, PartialEq)]
 pub enum MiscSym {
+    /// `int`
     Int,
+    /// `not`
     Not,
+    /// `str`
     Str,
 }
 impl fmt::Display for MiscSym {
@@ -51,12 +67,16 @@ impl fmt::Display for MiscSym {
     }
 }
 
+/// Match symbols.
 #[derive(Clone, Debug, PartialEq)]
 pub enum MatchSym {
+    /// `all`
     All,
+    /// `or`
     Of,
 }
 
+/// Tokens
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token {
     Delimiter(DelSym),
@@ -91,10 +111,30 @@ impl Token {
     }
 }
 
+/// Tokenise data into a collection of Tokens to then be used by the parser. This trait converts a
+/// tau engine condition into collection of Tokens.
+///
+/// The condition string supports the following:
+/// | Match | Description |
+/// |---|---|
+/// | '-', '0-9' | Integers |
+/// | 'a-z', 'A-Z' | Keywords & Identifiers |
+/// | ' ', '\x09'-'\x0d' | Whitespace |
+/// | '=', '==', '>', '>=', '<', '<=' | Booleans |
+/// | ',', '(', ')' | Miscellaneous |
+///
+/// Where keywords are:
+/// - all
+/// - and
+/// - int
+/// - not
+/// - of
+/// - or
+/// - str
+/// - string
 pub trait Tokeniser {
     fn tokenise(&self) -> crate::Result<Vec<Token>>;
 }
-
 impl Tokeniser for String {
     fn tokenise(&self) -> crate::Result<Vec<Token>> {
         let mut it = self.chars().peekable();

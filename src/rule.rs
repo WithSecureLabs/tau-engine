@@ -10,10 +10,14 @@ use crate::parser::{self, Expression};
 use crate::solver;
 use crate::tokeniser::Tokeniser;
 
+/// The detection block, this contains the logic that is to be run through the solver to evaluate a
+/// `Document`.
 #[derive(Clone, Serialize)]
 pub struct Detection {
+    /// The core expression.
     #[serde(skip_serializing)]
     pub expression: Expression,
+    /// Additional expressions, defined using key/value pairs.
     #[serde(skip_serializing)]
     pub identifiers: HashMap<String, Expression>,
 
@@ -112,6 +116,70 @@ impl<'de> Deserialize<'de> for Detection {
     }
 }
 
+/// A Rule used by the solver to evaluate a `Document`.
+///
+/// A rule contains the detection logic, along with the true positive and negative tests. The
+/// inclusion of these basic test allows for a basic level of verification to be ensured.
+///
+/// Rules are written in YAML and have a simple but powerful syntax.
+///
+/// # Syntax
+///
+/// There are two parts to a rule's logic: the condition block & the identifier blocks.
+///
+/// ## Condition
+///
+/// The condition is the main expression and describes the top level logic for the rule. It can be
+/// comprised of the following:
+///
+/// <table>
+///     <thead>
+///         <tr>
+///             <th>Syntax</th>
+///             <th>Description</th>
+///         </tr>
+///     </thead>
+///     <tbody>
+///         <tr>
+///             <td>_ <code>and</code> _</td>
+///             <td>
+///                 <span>This allows for the logical conjunction of two operands, where the
+///                 operands are any of the following:</span>
+///                 <ul>
+///                     <li>
+///                         <code>identifier</code><span>: a key that matches an identifier in the detection block.</span>
+///                     </li>
+///                 </ul>
+///             </tr>
+///     </tbody>
+/// </table>
+///
+/// # Examples
+///
+/// Here is a very simple rule.
+///
+/// ```text
+/// detection:
+///   A:
+///     foo: foo*
+///     bar: *bar
+///   B:
+///     foobar:
+///     - foobar
+///     - foobaz
+///
+///   condition: A and B
+///
+/// true_positives:
+/// - foo: foobar
+///   bar: foobar
+///   foobar: foobar
+///
+/// true_negatives:
+/// - foo: bar
+///   bar: foo
+///   foobar: barfoo
+/// ```
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Rule {
     pub detection: Detection,

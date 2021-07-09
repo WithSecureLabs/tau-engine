@@ -1,3 +1,5 @@
+// Trait implementations that allow the solver to be gneric over serde_json's `Value`.
+
 use std::borrow::Cow;
 
 use serde_json::map::Map;

@@ -204,6 +204,15 @@ impl<'a> Value<'a> {
 /// }
 /// ```
 pub trait AsValue {
+    /// Returns the implemented type as a `Value`
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use tau_engine::AsValue;
+    ///
+    /// let value = "foobar".as_value();
+    /// ```
     fn as_value(&self) -> Value<'_>;
 }
 
@@ -359,7 +368,38 @@ impl_as_value_uint!(usize);
 /// ```
 #[allow(clippy::len_without_is_empty)]
 pub trait Array {
+    /// Returns a boxed iterator of `Value` items.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::collections::HashSet;
+    /// use tau_engine::{Array, Value};
+    ///
+    /// let mut set = HashSet::new();
+    /// set.insert(1);
+    ///
+    /// let mut value = Array::iter(&set);
+    ///
+    /// assert_eq!(value.next().is_some(), true);
+    /// ```
     fn iter(&self) -> Box<dyn Iterator<Item = Value<'_>> + '_>;
+
+    /// Returns the length of the array.
+    ///
+    /// # Example
+    ///
+    ///```
+    /// use std::collections::HashSet;
+    /// use tau_engine::{Array, Value};
+    ///
+    /// let mut set = HashSet::new();
+    /// set.insert(1);
+    ///
+    /// let len = Array::len(&set);
+    ///
+    /// assert_eq!(len, 1);
+    /// ```
     fn len(&self) -> usize;
 }
 
@@ -493,6 +533,8 @@ where
 /// ```
 #[allow(clippy::len_without_is_empty)]
 pub trait Object {
+    /// Looks for a `Value` by key and returns it if found. The provided implementation will split
+    /// the key on `.` to handle nesting.
     fn find(&self, key: &str) -> Option<Value<'_>> {
         let mut v: Option<Value<'_>> = None;
         for k in key.split('.') {
@@ -511,8 +553,14 @@ pub trait Object {
         }
         v
     }
+
+    /// Get the `Value` corresponding to the key.
     fn get(&self, key: &str) -> Option<Value<'_>>;
+
+    /// Returns the keys for the object.
     fn keys(&self) -> Vec<Cow<'_, str>>;
+
+    /// Returns the number of elements in the object.
     fn len(&self) -> usize;
 }
 

@@ -1,29 +1,43 @@
 use regex::{Regex, RegexBuilder};
 
+// Identifier string matching patterns.
 #[derive(Clone, Debug)]
 pub enum Pattern {
+    // `*foo*`
     Contains(String),
+    // `=1`
     Equal(i64),
+    // `*foo`
     EndsWith(String),
+    // `foo`
     Exact(String),
+    // `>1`
     GreaterThan(i64),
+    // `>=1`
     GreaterThanOrEqual(i64),
+    // `<1`
     LessThan(i64),
+    // `<=1`
     LessThanOrEqual(i64),
+    // `?foo`
     Regex(Regex),
+    // `foo*`
     StartsWith(String),
 }
 
+// An identifier containing its pattern and case options
 #[derive(Clone, Debug)]
 pub struct Identifier {
+    /// Whether the identifier is case insensitive.
     pub ignore_case: bool,
+    /// The match pattern of the identifier.
     pub pattern: Pattern,
 }
 
+/// Parse data into an Identifier. This trait parses a Tau Engine identifier into an `Identifier`.
 pub trait IdentifierParser {
     fn into_identifier(self) -> crate::Result<Identifier>;
 }
-
 impl IdentifierParser for String {
     fn into_identifier(self) -> crate::Result<Identifier> {
         let (insensitive, string) = if cfg!(feature = "ignore_case") {

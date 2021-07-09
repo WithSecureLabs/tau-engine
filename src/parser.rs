@@ -545,8 +545,6 @@ where
     }
 }
 
-// FIXME: We should really be parsing the identifier blocks using the Pratt parser, but tokenising
-// them is hard, so we just cheat for now... :P
 pub fn parse_identifier(yaml: &Yaml) -> crate::Result<Expression> {
     match yaml {
         Yaml::Mapping(m) => parse_mapping(m),
@@ -590,7 +588,6 @@ pub fn parse_identifier(yaml: &Yaml) -> crate::Result<Expression> {
 
 fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
     let mut expressions = vec![];
-    // TODO: Clean
     for (k, v) in mapping {
         let (e, f) = match k {
             Yaml::String(s) => {
