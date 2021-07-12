@@ -125,7 +125,7 @@ impl<'de> Deserialize<'de> for Detection {
 ///
 /// # Syntax
 ///
-/// There are two parts to a rule's logic: the condition block & the identifier blocks.
+/// There are two parts to a rule's logic: the condition & the identifiers.
 ///
 /// ## Condition
 ///
@@ -135,7 +135,7 @@ impl<'de> Deserialize<'de> for Detection {
 /// <table>
 ///     <thead>
 ///         <tr>
-///             <th>Syntax</th>
+///             <th>Expression</th>
 ///             <th>Description</th>
 ///         </tr>
 ///     </thead>
@@ -143,16 +143,189 @@ impl<'de> Deserialize<'de> for Detection {
 ///         <tr>
 ///             <td>_ <code>and</code> _</td>
 ///             <td>
-///                 <span>This allows for the logical conjunction of two operands, where the
-///                 operands are any of the following:</span>
+///                 <span>The logical conjunction of two operands, where the operands are any of the following:</span>
 ///                 <ul>
+///                     <li>
+///                         <code>expression</code><span>: a nested expression.</span>
+///                     </li>
 ///                     <li>
 ///                         <code>identifier</code><span>: a key that matches an identifier in the detection block.</span>
 ///                     </li>
 ///                 </ul>
-///             </tr>
+///             </td>
+///         </tr>
+///         <tr>
+///             <td>_ <code>or</code> _</td>
+///             <td>
+///                 <span>The logical disjunction of two operands, where the operands are any of the following:</span>
+///                 <ul>
+///                     <li>
+///                         <code>expression</code><span>: a nested expression.</span>
+///                     </li>
+///                     <li>
+///                         <code>identifier</code><span>: a key that matches an identifier in the detection block.</span>
+///                     </li>
+///                 </ul>
+///             </td>
+///         </tr>
+///         <tr>
+///             <td>_ <code>==</code> _</td>
+///             <td>
+///                 <span>The equality comparison of two operands, where the operands are any of the following:</span>
+///                 <ul>
+///                     <li>
+///                         <code>integer</code><span>: an integer.</span>
+///                     </li>
+///                     <li>
+///                         <code>string</code><span>: a string.</span>
+///                     </li>
+///                     <li>
+///                         <code>int(field)</code><span>: a field that should be cast as an
+///                         integer.</span>
+///                     </li>
+///                     <li>
+///                         <code>str(field)</code><span>: a field that should be cast as a
+///                         string.</span>
+///                     </li>
+///                 </ul>
+///             </td>
+///         </tr>
+///         <tr>
+///             <td>_ <code>&gt</code> _</td>
+///             <td>
+///                 <span>The greater than comparison of two operands, where the operands are any of the following:</span>
+///                 <ul>
+///                     <li>
+///                         <code>integer</code><span>: an integer.</span>
+///                     </li>
+///                     <li>
+///                         <code>int(field)</code><span>: a field that should be cast as an
+///                         integer.</span>
+///                     </li>
+///                 </ul>
+///             </td>
+///         </tr>
+///         <tr>
+///             <td>_ <code>&gt=</code> _</td>
+///             <td>
+///                 <span>The greater than or equal comparison of two operands, where the operands are any of the following:</span>
+///                 <ul>
+///                     <li>
+///                         <code>integer</code><span>: an integer.</span>
+///                     </li>
+///                     <li>
+///                         <code>int(field)</code><span>: a field that should be cast as an
+///                         integer.</span>
+///                     </li>
+///                 </ul>
+///             </td>
+///         </tr>
+///         <tr>
+///             <td>_ <code>&lt</code> _</td>
+///             <td>
+///                 <span>The less than comparison of two operands, where the operands are any of the following:</span>
+///                 <ul>
+///                     <li>
+///                         <code>integer</code><span>: an integer.</span>
+///                     </li>
+///                     <li>
+///                         <code>int(field)</code><span>: a field that should be cast as an
+///                         integer.</span>
+///                     </li>
+///                 </ul>
+///             </td>
+///         </tr>
+///         <tr>
+///             <td>_ <code>&lt=</code> _</td>
+///             <td>
+///                 <span>The less than or equal comparison of two operands, where the operands are any of the following:</span>
+///                 <ul>
+///                     <li>
+///                         <code>integer</code><span>: an integer.</span>
+///                     </li>
+///                     <li>
+///                         <code>int(field)</code><span>: a field that should be cast as an
+///                         integer.</span>
+///                     </li>
+///                 </ul>
+///             </td>
+///         </tr>
+///         <tr>
+///             <td><code>all(i)</code></td>
+///             <td>
+///                 <span>An identifier mutator that evaluates to true only if all conditions for identifier <code>i</code> match.</span>
+///             </td>
+///         </tr>
+///         <tr>
+///             <td><code>not</code> _</td>
+///             <td>
+///                 <span>Negate the result of an expression.</span>
+///                 <span>NOTE: This will only negate a result that is true or false, it will
+///                 noop if the result is missing.</span>
+///             </td>
+///         </tr>
+///         <tr>
+///             <td><code style="white-space:nowrap">of(x, i)</code></td>
+///             <td>
+///                 <span>An identifier mutator that evaluates to true only if a minimum of <code>x</code> conditions for identifier <code>i</code> match.</span>
+///             </td>
+///         </tr>
 ///     </tbody>
 /// </table>
+///
+/// # Identifiers
+///
+/// Identifiers are used to describe the matching logic for the values contained within documents.
+/// These are then collected by the condition in order to create a rule that can be used to tag a
+/// document.
+///
+/// Due to the nature of an identifier, they are essentially just variations on key/value pairs.
+/// the following variations are supported, where mappings are treated as conjunctions and
+/// sequences are treated as disjunctions:
+///
+/// ```text
+/// # K/V Pairs
+/// IDENTIFIER:
+///     KEY: MATCH
+///
+/// # K/V Pairs with multiple matches
+/// IDENTIFIER:
+///     KEY:
+///     - MATCH
+///
+/// # K/V Pairs (Grouped)
+/// IDENTIFIER:
+///     - KEY: MATCH
+///
+/// # K/V Pairs (Nested)
+/// IDENTIFIER:
+///     KEY:
+///         KEY: MATCH
+/// ```
+///
+/// Identifiers are unique keys that can be reference in the `condition`.
+///
+/// Keys are used to get the values from documents.
+///
+/// Matches are the expressions to evaluate against values returned by keys. They support the
+/// following syntax:
+///
+/// <table>
+///     <thead>
+///         <tr>
+///             <th>Expression</th>
+///             <th>Description</th>
+///         </tr>
+///     </thead>
+///     <tbody>
+///         <tr>
+///             <td>_ <code>and</code> _</td>
+///             <td>
+///             </td>
+///         </tr>
+///     </tbody>
+/// </table>
+///
 ///
 /// # Examples
 ///
