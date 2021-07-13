@@ -123,3 +123,118 @@ impl IdentifierParser for String {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn contains() {
+        let identifier = "*foo*".to_owned().into_identifier().unwrap();
+        match identifier.pattern {
+            Pattern::Contains(x) => {
+                assert_eq!(x, "foo");
+            }
+            _ => panic!("unexpected pattern"),
+        }
+    }
+
+    #[test]
+    fn equal() {
+        let identifier = "=1".to_owned().into_identifier().unwrap();
+        match identifier.pattern {
+            Pattern::Equal(x) => {
+                assert_eq!(x, 1);
+            }
+            _ => panic!("unexpected pattern"),
+        }
+    }
+
+    #[test]
+    fn ends_with() {
+        let identifier = "*foo".to_owned().into_identifier().unwrap();
+        match identifier.pattern {
+            Pattern::EndsWith(x) => {
+                assert_eq!(x, "foo");
+            }
+            _ => panic!("unexpected pattern"),
+        }
+    }
+
+    #[test]
+    fn exact() {
+        let identifier = "foo".to_owned().into_identifier().unwrap();
+        match identifier.pattern {
+            Pattern::Exact(x) => {
+                assert_eq!(x, "foo");
+            }
+            _ => panic!("unexpected pattern"),
+        }
+    }
+
+    #[test]
+    fn greater_than() {
+        let identifier = ">1".to_owned().into_identifier().unwrap();
+        match identifier.pattern {
+            Pattern::GreaterThan(x) => {
+                assert_eq!(x, 1);
+            }
+            _ => panic!("unexpected pattern"),
+        }
+    }
+
+    #[test]
+    fn greater_than_or_equal() {
+        let identifier = ">=1".to_owned().into_identifier().unwrap();
+        match identifier.pattern {
+            Pattern::GreaterThanOrEqual(x) => {
+                assert_eq!(x, 1);
+            }
+            _ => panic!("unexpected pattern"),
+        }
+    }
+
+    #[test]
+    fn less_than() {
+        let identifier = "<1".to_owned().into_identifier().unwrap();
+        match identifier.pattern {
+            Pattern::LessThan(x) => {
+                assert_eq!(x, 1);
+            }
+            _ => panic!("unexpected pattern"),
+        }
+    }
+
+    #[test]
+    fn less_than_or_equal() {
+        let identifier = "<=1".to_owned().into_identifier().unwrap();
+        match identifier.pattern {
+            Pattern::LessThanOrEqual(x) => {
+                assert_eq!(x, 1);
+            }
+            _ => panic!("unexpected pattern"),
+        }
+    }
+
+    #[test]
+    fn regex() {
+        let identifier = "?foo".to_owned().into_identifier().unwrap();
+        match identifier.pattern {
+            Pattern::Regex(x) => {
+                assert_eq!(x.as_str(), "foo");
+            }
+            _ => panic!("unexpected pattern"),
+        }
+    }
+
+    #[test]
+    fn starts_with() {
+        let identifier = "foo*".to_owned().into_identifier().unwrap();
+        match identifier.pattern {
+            Pattern::StartsWith(x) => {
+                assert_eq!(x.as_str(), "foo");
+            }
+            _ => panic!("unexpected pattern"),
+        }
+    }
+}

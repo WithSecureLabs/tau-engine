@@ -341,9 +341,22 @@ where
                         }
                     }
                     MiscSym::Not => {
-                        // Assume we can negate any expression, why not? Or should this only work for
-                        // identifiers?
                         let right = parse_expr(it, t.binding_power())?;
+                        match right {
+                            Expression::BooleanGroup(_, _)
+                            | Expression::BooleanExpression(_, _, _)
+                            | Expression::Boolean(_)
+                            | Expression::Identifier(_)
+                            | Expression::Match(_, _)
+                            | Expression::Negate(_)
+                            | Expression::Nested(_, _)
+                            | Expression::Search(_, _) => {}
+                            _ => {
+                                return Err(crate::error::parse_invalid_token(
+                                    "NUD expected a negatable expression",
+                                ))
+                            }
+                        }
                         Ok(Expression::Negate(Box::new(right)))
                     }
                     MiscSym::Str => {
@@ -752,6 +765,12 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                 };
                 expressions.push(expr);
             }
+            Yaml::Mapping(ref m) => {
+                expressions.push(Expression::Nested(
+                    f.to_owned(),
+                    Box::new(parse_mapping(m)?),
+                ));
+            }
             Yaml::Sequence(ref s) => {
                 // TODO: This block could probably be cleaned...
                 // Now we need to be as fast as possible it turns out that builtin strings functions are
@@ -1002,6 +1021,8 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
     }
     if expressions.is_empty() {
         return Err(crate::error::parse_invalid_ident("failed to parse mapping"));
+    } else if expressions.len() == 1 {
+        return Ok(expressions.into_iter().next().expect("missing expression"));
     }
     Ok(Expression::BooleanGroup(BoolSym::And, expressions))
 }
@@ -1009,11 +1030,31 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "benchmarks")]
-    use test;
+
+    use serde_yaml::Value as Yaml;
 
     #[test]
-    fn parse_and() {
+    fn parse_bool_group_match_search() {
+        let identifier = r"all(foo): [bar]";
+        let yaml: Yaml = serde_yaml::from_str(identifier).unwrap();
+        let e = super::parse_identifier(&yaml).unwrap();
+        assert_eq!(
+            Expression::Match(
+                Match::All,
+                Box::new(Expression::BooleanGroup(
+                    BoolSym::Or,
+                    vec![Expression::Search(
+                        Search::Exact("bar".to_owned()),
+                        "foo".to_owned()
+                    )]
+                ))
+            ),
+            e
+        );
+    }
+
+    #[test]
+    fn parse_bool_expr() {
         let e = parse(&vec![
             Token::Identifier("foo".to_string()),
             Token::Operator(BoolSym::And),
@@ -1031,21 +1072,24 @@ mod tests {
     }
 
     #[test]
-    fn parse_or() {
+    fn parse_cast() {
         let e = parse(&vec![
-            Token::Identifier("foo".to_string()),
-            Token::Operator(BoolSym::Or),
-            Token::Identifier("bar".to_string()),
+            Token::Miscellaneous(MiscSym::Int),
+            Token::Delimiter(DelSym::LeftParenthesis),
+            Token::Identifier("identifier".to_owned()),
+            Token::Delimiter(DelSym::RightParenthesis),
         ])
         .unwrap();
-        assert_eq!(
-            Expression::BooleanExpression(
-                Box::new(Expression::Identifier("foo".to_string())),
-                BoolSym::Or,
-                Box::new(Expression::Identifier("bar".to_string()))
-            ),
-            e
-        );
+        assert_eq!(Expression::Cast("identifier".to_string(), MiscSym::Int), e);
+
+        let e = parse(&vec![
+            Token::Miscellaneous(MiscSym::Str),
+            Token::Delimiter(DelSym::LeftParenthesis),
+            Token::Identifier("identifier".to_owned()),
+            Token::Delimiter(DelSym::RightParenthesis),
+        ])
+        .unwrap();
+        assert_eq!(Expression::Cast("identifier".to_string(), MiscSym::Str), e);
     }
 
     #[test]
@@ -1055,7 +1099,51 @@ mod tests {
     }
 
     #[test]
-    fn parse_expression() {
+    fn parse_integer() {
+        let e = parse(&vec![Token::Integer(1)]).unwrap();
+        assert_eq!(Expression::Integer(1), e);
+    }
+
+    #[test]
+    fn parse_negate() {
+        let e = parse(&vec![
+            Token::Miscellaneous(MiscSym::Not),
+            Token::Delimiter(DelSym::LeftParenthesis),
+            Token::Identifier("foo".to_string()),
+            Token::Operator(BoolSym::Or),
+            Token::Identifier("bar".to_string()),
+            Token::Delimiter(DelSym::RightParenthesis),
+        ])
+        .unwrap();
+        assert_eq!(
+            Expression::Negate(Box::new(Expression::BooleanExpression(
+                Box::new(Expression::Identifier("foo".to_string())),
+                BoolSym::Or,
+                Box::new(Expression::Identifier("bar".to_string()))
+            ))),
+            e
+        );
+    }
+
+    #[test]
+    fn parse_nested() {
+        let identifier = r"foo: {bar: baz}";
+        let yaml: Yaml = serde_yaml::from_str(identifier).unwrap();
+        let e = super::parse_identifier(&yaml).unwrap();
+        assert_eq!(
+            Expression::Nested(
+                "foo".to_owned(),
+                Box::new(Expression::Search(
+                    Search::Exact("baz".to_owned()),
+                    "bar".to_owned()
+                ))
+            ),
+            e
+        );
+    }
+
+    #[test]
+    fn parse_expression_0() {
         let t = parse(&vec![
             Token::Delimiter(DelSym::LeftParenthesis),
             Token::Identifier("foo".to_string()),
@@ -1138,19 +1226,15 @@ mod tests {
         );
     }
 
-    #[bench]
-    #[cfg(feature = "benchmarks")]
-    fn bench_simple_expression(b: &mut test::Bencher) {
-        b.iter(|| {
-            parse(&vec![
-                Token::Delimiter(DelSym::LeftParenthesis),
-                Token::Identifier("foo".to_string()),
-                Token::Operator(BoolSym::And),
-                Token::Identifier("bar".to_string()),
-                Token::Delimiter(DelSym::RightParenthesis),
-                Token::Operator(BoolSym::Or),
-                Token::Identifier("fooz".to_string()),
-            ])
-        });
+    #[test]
+    fn parse_invalid_0() {
+        let e = parse(&vec![
+            Token::Miscellaneous(MiscSym::Not),
+            Token::Miscellaneous(MiscSym::Int),
+            Token::Delimiter(DelSym::LeftParenthesis),
+            Token::Identifier("condition".to_string()),
+            Token::Delimiter(DelSym::RightParenthesis),
+        ]);
+        assert!(e.is_err());
     }
 }

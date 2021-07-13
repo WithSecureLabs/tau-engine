@@ -101,7 +101,7 @@ impl Token {
             },
             Token::Miscellaneous(ref m) => match *m {
                 MiscSym::Not => 95,
-                _ => 0,
+                MiscSym::Int | MiscSym::Str => 60,
             },
             Token::Match(ref s) => match *s {
                 MatchSym::All | MatchSym::Of => 60,
@@ -280,7 +280,7 @@ fn match_ahead(it: &mut Peekable<Chars<'_>>, value: &str) -> bool {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
 
     use crate::error::{Kind, Token as Error};

@@ -50,3 +50,30 @@ impl<O: Object> Document for O {
         Object::find(self, key)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::borrow::Cow;
+
+    struct Foo {
+        bar: String,
+    }
+    impl Document for Foo {
+        fn find(&self, key: &str) -> Option<Value<'_>> {
+            match key {
+                "bar" => Some(Value::String(Cow::Borrowed(&self.bar))),
+                _ => None,
+            }
+        }
+    }
+
+    #[test]
+    fn find() {
+        let foo = Foo {
+            bar: "baz".to_owned(),
+        };
+        assert_eq!(foo.find("bar").unwrap().as_str().unwrap(), "baz");
+    }
+}

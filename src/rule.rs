@@ -460,3 +460,36 @@ impl Rule {
         Ok(true)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rule() {
+        let rule = r#"
+        detection:
+          A:
+            foo: 'foo*'
+            bar: '*bar'
+          B:
+            foobar:
+            - foobar
+            - foobaz
+
+          condition: A and B
+
+        true_positives:
+        - foo: foobar
+          bar: foobar
+          foobar: foobar
+
+        true_negatives:
+        - foo: bar
+          bar: foo
+          foobar: barfoo
+        "#;
+        let rule = Rule::load(rule).unwrap();
+        assert_eq!(rule.validate().unwrap(), true);
+    }
+}
