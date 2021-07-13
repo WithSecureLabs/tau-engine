@@ -305,9 +305,32 @@ impl<'de> Deserialize<'de> for Detection {
 ///
 /// Identifiers are unique keys that can be reference in the `condition`.
 ///
-/// Keys are used to get the values from documents.
+/// Keys are used to get the values from documents. Keys can be wrapped in the following modifiers:
 ///
-/// Matches are the expressions to evaluate against values returned by keys. They support the
+/// <table>
+///     <thead>
+///         <tr>
+///             <th>Expression</th>
+///             <th>Description</th>
+///         </tr>
+///     </thead>
+///     <tbody>
+///         <tr>
+///             <td><code>all(k)</code></td>
+///             <td>
+///                 <span>An key mutator that evaluates to true only if all matches for keys <code>k</code> match.</span>
+///             </td>
+///         </tr>
+///         <tr>
+///             <td><code style="white-space:nowrap">of(x, k)</code></td>
+///             <td>
+///                 <span>An key mutator that evaluates to true only if a minimum of <code>x</code> matches for key <code>k</code> match.</span>
+///             </td>
+///         </tr>
+///     </tbody>
+/// </table>
+///
+/// Matches are the expressions which are evaluated against values returned by keys. They support the
 /// following syntax:
 ///
 /// <table>
@@ -319,17 +342,37 @@ impl<'de> Deserialize<'de> for Detection {
 ///     </thead>
 ///     <tbody>
 ///         <tr>
-///             <td>_ <code>and</code> _</td>
-///             <td>
-///             </td>
+///             <td><code>foo</code></td>
+///             <td><span>An exact match</span></td>
+///         </tr>
+///         <tr>
+///             <td><code>foo*</code></td>
+///             <td><span>Starts with</span></td>
+///         </tr>
+///         <tr>
+///             <td><code>*foo</code></td>
+///             <td><span>Ends with</span></td>
+///         </tr>
+///         <tr>
+///             <td><code>*foo*</code></td>
+///             <td><span>Contains</span></td>
+///         </tr>
+///         <tr>
+///             <td><code>?foo</code></td>
+///             <td><span>Regex</span></td>
+///         </tr>
+///         <tr>
+///             <td><code>i</code>_</td>
+///             <td><span>A prefix to convert the match into a case insensitive match.</span></td>
 ///         </tr>
 ///     </tbody>
 /// </table>
 ///
+/// To escape any of the above in order to achieve literal string matching, combinations of `'` and `"` can be used.
 ///
 /// # Examples
 ///
-/// Here is a very simple rule.
+/// Here is a very simple rule:
 ///
 /// ```text
 /// detection:
@@ -353,6 +396,26 @@ impl<'de> Deserialize<'de> for Detection {
 ///   bar: foo
 ///   foobar: barfoo
 /// ```
+///
+/// Here is a slightly more complex rule:
+///
+/// ```text
+/// detection:
+///   A:
+///     all(phrase):
+///     - *quick*
+///     - *brown*
+///   B:
+///     phrase: ibear
+///
+///   condition: A and not B
+///
+/// true_positives:
+/// - phrase: the quick brown fox
+///
+/// true_negatives:
+/// - foo: the quick brown BEAR
+/// ```
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Rule {
     pub detection: Detection,
@@ -361,11 +424,18 @@ pub struct Rule {
 }
 
 impl Rule {
+    /// Load a rule from a YAML string.
+    pub fn load(rule: &str) -> crate::Result<Self> {
+        serde_yaml::from_str(rule).map_err(crate::error::rule_invalid)
+    }
+
+    /// Evaluates the rule against the provided `Document`, returning true if it has matched.
     #[inline]
     pub fn matches(&self, document: &dyn Document) -> bool {
         solver::solve(&self.detection, document)
     }
 
+    /// Validates the rule's detection logic against the provided true positives and negatives.
     pub fn validate(&self) -> crate::Result<bool> {
         let mut errors = vec![];
         for test in &self.true_positives {

@@ -1,77 +1,160 @@
 //! # Tau Engine
 //!
-//! This crate provides a library that tags documents through the evaluation of rules.
-//! The engine makes use of a Pratt parser and a tree solver in order to match the contents of a
-//! rule against a document.
+//! This crate provides a library that tags documents by running rules over them.
+//! The engine makes use of a Pratt parser and a tree solver in order to evaluate the detection
+//! logic of a rule against a document, if the outcome is true the document is considered tagged by
+//! that rule.
 //!
 //!
 //! ## Rules
 //!
-//! A rule is a collection of logic that is used to tag documents.
-//! They are generally written in YAML and an example can be seen below
+//! A rule is used to tag a document and is made up of three parts:
+//! - `detection`: the logic used to evaluate a document.
+//! - `true positive`: an example document that must evaluate to true for the given detection.
+//! - `true negative`: an example document that must evaluate to false for the given detection.
+//!
+//! The detection block is made up of a condition, and identifiers. This allows for simple but
+//! expressive rules, below is a brief summary (see [Rules](Rule) for more):
+//!
+//! Identifiers are used to help keep the condition concise and generally contain the core of the
+//! matching logic. They consist of Key/Value pairs which allow for the extraction of data from the
+//! document and the evaluate of its value. It should be noted that mappings are treated as
+//! conjunctions, while sequences are treated as disjunctions.
+//!
+//! Identifiers make use of the following matching logic:
+//! - `foobar`: an exact match of foobar
+//! - `foobar*`: starts with foobar
+//! - `*foobar`: ends with foobar
+//! - `*foobar*`: contains foobar
+//! - `?foobar`: regex foobar
+//!
+//! > Any of the above can be made case insensitive with the `i` prefix.</br>
+//! > Escaping can be achieved with a combination of `'` & `"`.
+//!
+//! The condition is just a boolean expression and supports the following:
+//! - `and`: logical conjunction
+//! - `or`: logical disjunction
+//! - `==`: equality comparison
+//! - `>`, `>=`, `<`, `<=`: numeric comparisons
+//! - `not`: negate
+//! - `all(i)`: make sequences behave as conjunctions
+//! - `of(x, i)`: ensure a sequence has a minimum number of matches
+//!
+//!
+//! ### Examples
 //!
 //! ```text
 //! detection:
-//!     A:
-//!         foo: bar
+//!   A:
+//!     foo.bar: foobar
 //!
-//!     condition: A
+//!   condition: A
 //!
 //! true_positives:
-//! - foo: bar
+//! - foo:
+//!     bar: foobar
 //!
 //! true_negatives:
-//! - foo: baz
+//! - foo:
+//!     bar: foo
 //! ```
-//!
-//! Where the detection contains the rule logic, the true_positives contain documents that should
-//! evaluate true, and the true_negatives contain documents that should evaluate false.
-//!
 //!
 //! ## Documents
 //!
-//! A document is the data that a rule is evaluating.
-//! This is generically achieved through implementation of the ['Document'](document::Document) trait.
-//! By implementing this trait on data types, the Tau Engine is then able to dynamically extract
-//! values for evaluation.
+//! A document is that can return data to the engine in a meaningful way, usually through Key/Value
+//! pairs, i.e: an event log, json object, yaml file, etc. Implementations are achieved with the
+//! [`Document`](Document) trait.
 //!
-//! //```
-//! //use std::borrow::Cow;
-//! //use tau_engine::{Document, Value};
+//! ## Solving
 //!
-//! //struct Foo {
-//! //    pub foo: String,
-//! //    pub bar: String,
-//! //}
+//! This is the process of tagging a document against a rule, or to put differently the process of
+//! evaluating a rule over a document.
 //!
-//! //impl Document for Foo {
-//! //    fn find(&self, key: &str) -> Option<Value<'_>> {
-//! //        match key {
-//! //            "foo" => Some(Value::Str(Cow::Borrowed(self.foo))),
-//! //            "bar" => Some(Value::Str(Cow::Borrowed(self.bar))),
-//! //            _ => None,
-//! //        }
-//! //    }
-//! //}
-//! //```
+//! ```
+//! use std::borrow::Cow;
 //!
-//! //## Solving
+//! use tau_engine::{Document, Rule, Value};
 //!
-//! //```
-//! //let rule = """
-//! //    detection:
-//! //        A:
-//! //            foo: bar
+//! // Define a document.
+//! struct Foo {
+//!     foo: String,
+//! }
+//! impl Document for Foo {
+//!     fn find(&self, key: &str) -> Option<Value<'_>> {
+//!         match key {
+//!             "foo" => Some(Value::String(Cow::Borrowed(&self.foo))),
+//!             _ => None,
+//!         }
+//!     }
+//! }
 //!
-//! //        condition: A
+//! // Write a rule.
+//! let rule = r#"
+//! detection:
+//!   A:
+//!     foo: foobar
+//!   condition: A
+//! true_positives:
+//! - foo: foobar
+//! true_negatives:
+//! - foo: foo
+//! "#;
 //!
-//! //    true_positives:
-//! //    - foo: bar
+//! // Load and validate a rule.
+//! let rule = Rule::load(rule).unwrap();
+//! assert_eq!(rule.validate().unwrap(), true);
 //!
-//! //    true_negatives:
-//! //    - foo: baz
-//! //""";
-//! //```
+//! // Create a document.
+//! let foo = Foo {
+//!     foo: "foobar".to_owned(),
+//! };
+//!
+//! // Evalute the document with the rule.
+//! assert_eq!(rule.matches(&foo), true);
+//! ```
+//!
+//! ## Features
+//!
+//! The following are a list of features that can be enabled or disabled:
+//! - **ignore_case**: Force the engine to always be case insensitive, this will ignore
+//! the `i` prefix and for that reason is not compatible with case sensitive rules.
+//! - **json**: Enable serde json support, the tau-engine will be able to solve on
+//! `serde_json::Value`.
+//!
+//!
+//! ### JSON
+//!
+//! When JSON support is enabled for the tau-engine, the result is a solver that can now reason over
+//! any document that can be deserialized into `serde_json::Value`.
+//!
+//! ```ignore
+//! # use serde_json::json;
+//! use tau_engine::{Document, Rule};
+//!
+//! // Write a rule.
+//! let rule = r#"
+//! detection:
+//!   A:
+//!     foo: foobar
+//!   condition: A
+//! true_positives:
+//! - foo: foobar
+//! true_negatives:
+//! - foo: foo
+//! "#;
+//!
+//! // Load and validate a rule.
+//! let rule = Rule::load(rule).unwrap();
+//! assert_eq!(rule.validate().unwrap(), true);
+//!
+//! // Create a document.
+//! let foo = json!({
+//!     "foo": "foobar",
+//! });
+//!
+//! // Evalute the document with the rule.
+//! assert_eq!(rule.matches(&foo), true);
+//! ```
 
 #![cfg_attr(feature = "benchmarks", feature(test))]
 

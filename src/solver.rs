@@ -26,6 +26,7 @@ impl fmt::Display for SolverResult {
     }
 }
 
+/// Evalutes a `Document` with a provided detection, returning true if the detection solves.
 pub fn solve(detection: &Detection, document: &dyn Document) -> bool {
     match solve_expression(&detection.expression, &detection.identifiers, document) {
         SolverResult::True => true,

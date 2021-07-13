@@ -21,3 +21,7 @@ tracing = "0.1"
 benchmarks = []
 ignore_case = []
 json = ["serde_json"]
+
+
+[package.metadata.docs.rs]
+features = ["json"]

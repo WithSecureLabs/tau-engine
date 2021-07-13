@@ -61,6 +61,7 @@ impl fmt::Display for Error {
             Kind::Parse(Parse::LedPreceding) => {
                 "an invalid expression was encountered preceding the LED during parsing"
             }
+            Kind::Rule => "an invalid rule was provided",
             Kind::Token(Token::InvalidCharacter) => {
                 "an invalid character was encountered during tokenisation"
             }
@@ -88,6 +89,8 @@ impl StdError for Error {
 pub enum Kind {
     /// Parsing Errors
     Parse(Parse),
+    /// Invalid rule
+    Rule,
     /// Tokenising Errors
     Token(Token),
     /// Failed to validate the rule
@@ -142,6 +145,11 @@ pub(crate) fn parse_led_following<E: Into<Source>>(e: E) -> Error {
 #[inline]
 pub(crate) fn parse_led_preceding<E: Into<Source>>(e: E) -> Error {
     Error::new(Kind::Parse(Parse::LedPreceding)).with(e)
+}
+
+#[inline]
+pub(crate) fn rule_invalid<E: Into<Source>>(e: E) -> Error {
+    Error::new(Kind::Rule).with(e)
 }
 
 #[inline]
