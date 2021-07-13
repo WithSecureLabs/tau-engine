@@ -16,6 +16,8 @@
 //! The detection block is made up of a condition, and identifiers. This allows for simple but
 //! expressive rules, below is a brief summary (see [Rules](Rule) for more):
 //!
+//! ### Identifiers
+//!
 //! Identifiers are used to help keep the condition concise and generally contain the core of the
 //! matching logic. They consist of Key/Value pairs which allow for the extraction of data from the
 //! document and the evaluate of its value. It should be noted that mappings are treated as
@@ -28,8 +30,10 @@
 //! - `*foobar*`: contains foobar
 //! - `?foobar`: regex foobar
 //!
-//! > Any of the above can be made case insensitive with the `i` prefix.</br>
-//! > Escaping can be achieved with a combination of `'` & `"`.
+//! Any of the above can be made case insensitive with the `i` prefix.</br>
+//! Escaping can be achieved with a combination of `'` & `"`.
+//!
+//! ### Condition
 //!
 //! The condition is just a boolean expression and supports the following:
 //! - `and`: logical conjunction
