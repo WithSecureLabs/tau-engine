@@ -377,8 +377,8 @@ impl<'de> Deserialize<'de> for Detection {
 /// ```text
 /// detection:
 ///   A:
-///     foo: foo*
-///     bar: *bar
+///     foo: "foo*"
+///     bar: "*bar"
 ///   B:
 ///     foobar:
 ///     - foobar
@@ -403,8 +403,8 @@ impl<'de> Deserialize<'de> for Detection {
 /// detection:
 ///   A:
 ///     all(phrase):
-///     - *quick*
-///     - *brown*
+///     - "*quick*"
+///     - "*brown*"
 ///   B:
 ///     phrase: ibear
 ///

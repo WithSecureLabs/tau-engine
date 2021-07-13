@@ -17,6 +17,10 @@ serde_yaml = "0.8"
 tracing = "0.1"
 
 
+[dev-dependencies]
+paste = "1.0"
+
+
 [features]
 benchmarks = []
 ignore_case = []

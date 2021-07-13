@@ -336,6 +336,7 @@ impl_as_value_uint!(usize);
 /// use tau_engine::{Array, Value};
 ///
 /// // NOTE: Implements Iterator
+/// #[derive(Clone)]
 /// struct Counter {
 ///    count: usize,
 /// }
@@ -358,11 +359,11 @@ impl_as_value_uint!(usize);
 /// # }
 /// impl Array for Counter {
 ///     fn iter(&self) -> Box<dyn Iterator<Item = Value<'_>> + '_> {
-///         Box::new(self.iter())
+///         Box::new(self.clone().map(|v| Value::UInt(v as u64)))
 ///     }
 ///
 ///     fn len(&self) -> usize {
-///         self.len()
+///         self.clone().count()
 ///     }
 /// }
 /// ```
