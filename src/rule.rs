@@ -265,7 +265,7 @@ impl<'de> Deserialize<'de> for Detection {
 ///             </td>
 ///         </tr>
 ///         <tr>
-///             <td><code style="white-space:nowrap">of(x, i)</code></td>
+///             <td><code style="white-space:nowrap">of(i, x)</code></td>
 ///             <td>
 ///                 <span>An identifier mutator that evaluates to true only if a minimum of <code>x</code> conditions for identifier <code>i</code> match.</span>
 ///             </td>
@@ -322,7 +322,7 @@ impl<'de> Deserialize<'de> for Detection {
 ///             </td>
 ///         </tr>
 ///         <tr>
-///             <td><code style="white-space:nowrap">of(x, k)</code></td>
+///             <td><code style="white-space:nowrap">of(k, x)</code></td>
 ///             <td>
 ///                 <span>An key mutator that evaluates to true only if a minimum of <code>x</code> matches for key <code>k</code> match.</span>
 ///             </td>

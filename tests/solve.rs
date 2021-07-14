@@ -12,4 +12,5 @@ macro_rules! solve_rule {
     };
 }
 
+solve_rule!("boolean_group");
 solve_rule!("identifier");

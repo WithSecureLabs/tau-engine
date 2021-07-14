@@ -42,7 +42,7 @@
 //! - `>`, `>=`, `<`, `<=`: numeric comparisons
 //! - `not`: negate
 //! - `all(i)`: make sequences behave as conjunctions
-//! - `of(x, i)`: ensure a sequence has a minimum number of matches
+//! - `of(i, x)`: ensure a sequence has a minimum number of matches
 //!
 //!
 //! ### Examples
