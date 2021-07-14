@@ -1,0 +1,10 @@
+detection:
+  condition: str(x) == str(y)
+
+true_positives:
+  - x: foo
+    y: foo
+
+true_negatives:
+  - x: foo
+    y: bar

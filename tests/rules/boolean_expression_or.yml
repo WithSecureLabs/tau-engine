@@ -1,17 +1,11 @@
 detection:
   A:
-    all(phrase):
-    - "*quick*"
-    - "*brown*"
+    phrase: "*quick*"
 
   B:
-    of(phrase, 2):
-    - "*quick*"
-    - "*brown*"
-    - "*fox*"
-    - "*jumps*"
+    phrase: "*brown*"
 
-  condition: A and B
+  condition: A or B
 
 true_positives:
   - phrase: the quick brown fox jumps over the lazy dog
