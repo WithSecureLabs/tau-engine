@@ -87,4 +87,7 @@ bench_test!("search_regex");
 bench_test!("search_starts_with");
 
 // Rules
+bench_rule!("complex");
+bench_rule!("contains_multiple");
+bench_rule!("regex_multiple");
 bench_rule!("simple");

@@ -87,7 +87,7 @@ impl fmt::Display for Expression {
                 g.iter()
                     .map(|e| e.to_string())
                     .collect::<Vec<String>>()
-                    .join(",")
+                    .join(", ")
             ),
             Self::BooleanExpression(l, o, r) => write!(f, "expression({} {} {})", l, o, r),
             Self::Boolean(b) => write!(f, "bool({})", b),
