@@ -604,7 +604,26 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
     for (k, v) in mapping {
         let (e, f) = match k {
             Yaml::String(s) => {
-                let tokens = s.tokenise()?;
+                // NOTE: Tokenise splits on whitespace, but this is undesired for keys, merge them
+                // back together
+                let mut identifier = vec![];
+                let mut tokens = vec![];
+                for token in s.tokenise()? {
+                    match token {
+                        Token::Identifier(s) => identifier.push(s),
+                        _ => {
+                            if !identifier.is_empty() {
+                                tokens.push(Token::Identifier(identifier.join(" ")));
+                                identifier.clear();
+                            }
+                            tokens.push(token);
+                        }
+                    }
+                }
+                if !identifier.is_empty() {
+                    tokens.push(Token::Identifier(identifier.join(" ")));
+                    identifier.clear();
+                }
                 let expr = parse(&tokens)?;
                 let (e, s) = match expr {
                     Expression::Identifier(s) => (Expression::Field(s.clone()), s),
