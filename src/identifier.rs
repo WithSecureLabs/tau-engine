@@ -79,7 +79,9 @@ impl IdentifierParser for String {
                 s.parse::<i64>()
                     .map_err(crate::error::parse_invalid_ident)?,
             )
-        } else if string.len() > 1 && string.starts_with('*') && string.ends_with('*') {
+        } else if string == "*" {
+            Pattern::Contains("".to_owned())
+        } else if string.starts_with('*') && string.ends_with('*') {
             let s = if insensitive {
                 string[1..string.len() - 1].to_lowercase()
             } else {
