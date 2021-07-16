@@ -28,6 +28,7 @@ pub enum Match {
 #[derive(Clone, Debug)]
 pub enum Search {
     AhoCorasick(Box<AhoCorasick>, Vec<MatchType>),
+    Any,
     Contains(String),
     EndsWith(String),
     Exact(String),
@@ -39,6 +40,7 @@ impl fmt::Display for Search {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::AhoCorasick(_, t) => write!(f, "aho_corasick({:?})", t),
+            Self::Any => write!(f, "any"),
             Self::Contains(s) => write!(f, "contains({})", s),
             Self::EndsWith(s) => write!(f, "ends_with({})", s),
             Self::Exact(s) => write!(f, "exact({})", s),
@@ -75,6 +77,7 @@ pub enum Expression {
     Match(Match, Box<Expression>),
     Negate(Box<Expression>),
     Nested(String, Box<Expression>),
+    Null,
     Search(Search, String),
 }
 impl fmt::Display for Expression {
@@ -101,6 +104,7 @@ impl fmt::Display for Expression {
             Self::Match(Match::Of(i), e) => write!(f, "of({}, {})", e, i),
             Self::Negate(e) => write!(f, "negate({})", e),
             Self::Nested(s, e) => write!(f, "nested({}, {})", s, e),
+            Self::Null => write!(f, "null"),
             Self::Search(e, s) => write!(f, "search({}, {})", s, e),
         }
     }
@@ -688,6 +692,14 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                     k
                 )));
             }
+            Yaml::Null => {
+                let expr = Expression::BooleanExpression(
+                    Box::new(e.clone()),
+                    BoolSym::Equal,
+                    Box::new(Expression::Null),
+                );
+                expressions.push(expr);
+            }
             Yaml::String(ref s) => {
                 let identifier = s.to_owned().into_identifier()?;
                 let expr = match identifier.pattern {
@@ -716,6 +728,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         BoolSym::LessThanOrEqual,
                         Box::new(Expression::Integer(i)),
                     ),
+                    Pattern::Any => Expression::Search(Search::Any, f.to_owned()),
                     Pattern::Regex(c) => Expression::Search(Search::Regex(c), f.to_owned()),
                     Pattern::Contains(c) => Expression::Search(
                         if identifier.ignore_case {
@@ -856,6 +869,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         Pattern::EndsWith(_) => ends_with.push(identifier),
                         Pattern::Contains(_) => contains.push(identifier),
                         Pattern::Regex(_) => regex.push(identifier),
+                        Pattern::Any => rest.push(Expression::Search(Search::Any, f.to_owned())),
                         Pattern::Equal(i) => rest.push(Expression::BooleanExpression(
                             Box::new(e.clone()),
                             BoolSym::Equal,
@@ -1029,12 +1043,6 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                 } else {
                     expressions.push(Expression::BooleanGroup(BoolSym::Or, group));
                 }
-            }
-            _ => {
-                return Err(crate::error::parse_invalid_ident(format!(
-                    "expected sequence or string, encountered - {:?}",
-                    v
-                )))
             }
         }
     }

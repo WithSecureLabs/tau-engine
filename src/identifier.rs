@@ -3,6 +3,8 @@ use regex::{Regex, RegexBuilder};
 // Identifier string matching patterns.
 #[derive(Clone, Debug)]
 pub enum Pattern {
+    // `*`
+    Any,
     // `*foo*`
     Contains(String),
     // `=1`
@@ -80,7 +82,7 @@ impl IdentifierParser for String {
                     .map_err(crate::error::parse_invalid_ident)?,
             )
         } else if string == "*" {
-            Pattern::Contains("".to_owned())
+            Pattern::Any
         } else if string.starts_with('*') && string.ends_with('*') {
             let s = if insensitive {
                 string[1..string.len() - 1].to_lowercase()

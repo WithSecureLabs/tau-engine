@@ -133,6 +133,20 @@ fn solve_expression(
                         return SolverResult::False;
                     }
                 }
+                (Expression::Field(ref left), BoolSym::Equal, Expression::Null) => {
+                    let x = match document.find(left) {
+                        Some(x) => x,
+                        None => {
+                            debug!("evaluating missing, no left hand side for {}", expression);
+                            return SolverResult::Missing;
+                        }
+                    };
+                    if x.is_null() {
+                        return SolverResult::True;
+                    } else {
+                        return SolverResult::False;
+                    }
+                }
                 _ => {}
             }
             // Boolean expressions
@@ -614,13 +628,17 @@ fn solve_expression(
         | Expression::Boolean(_)
         | Expression::Cast(_, _)
         | Expression::Field(_)
-        | Expression::Integer(_) => unreachable!(),
+        | Expression::Integer(_)
+        | Expression::Null => unreachable!(),
     }
 }
 
 #[inline]
 fn search(kind: &Search, value: &str) -> SolverResult {
     match kind {
+        Search::Any => {
+            return SolverResult::True;
+        }
         Search::Exact(ref i) => {
             if i == value {
                 return SolverResult::True;
