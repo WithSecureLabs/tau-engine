@@ -1254,6 +1254,23 @@ mod tests {
     }
 
     #[test]
+    fn parse_identifiers_0() {
+        let identifier = "[foo: bar]";
+        let yaml: Yaml = serde_yaml::from_str(&identifier).unwrap();
+        let e = super::parse_identifier(&yaml).unwrap();
+        assert_eq!(
+            Expression::BooleanGroup(
+                BoolSym::Or,
+                vec![Expression::Search(
+                    Search::Exact("bar".to_owned()),
+                    "foo".to_owned()
+                )]
+            ),
+            e
+        );
+    }
+
+    #[test]
     fn parse_invalid_0() {
         let e = parse(&vec![
             Token::Miscellaneous(MiscSym::Not),

@@ -349,6 +349,7 @@ fn solve_expression(
             let (_, group) = match **e {
                 Expression::Identifier(ref i) => match identifiers.get(i) {
                     Some(Expression::BooleanGroup(o, g)) => (o, g),
+                    Some(e) => return solve_expression(e, identifiers, document),
                     _ => unreachable!(),
                 },
                 Expression::BooleanGroup(ref o, ref g) => (o, g),
