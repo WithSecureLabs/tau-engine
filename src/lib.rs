@@ -1,7 +1,6 @@
 //! # Tau Engine
 //!
-//! This crate provides a library that tags documents by running rules over them and matching on
-//! the specificed rule logic.
+//! This crate provides a library that tags documents by running and matching rules over them.
 //! The engine makes use of a Pratt parser and a tree solver in order to evaluate the detection
 //! logic of a rule against a document, if the outcome is true the document is considered tagged by
 //! that rule.
