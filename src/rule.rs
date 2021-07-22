@@ -116,7 +116,7 @@ impl<'de> Deserialize<'de> for Detection {
     }
 }
 
-/// A Rule used by the solver to evaluate a `Document`.
+/// A rule used by the solver to evaluate a `Document`.
 ///
 /// A rule contains the detection logic, along with the true positive and negative tests. The
 /// inclusion of these basic test allows for a basic level of verification to be ensured.
@@ -279,8 +279,8 @@ impl<'de> Deserialize<'de> for Detection {
 /// These are then collected by the condition in order to create a rule that can be used to tag a
 /// document.
 ///
-/// Due to the nature of an identifier, they are essentially just variations on key/value pairs.
-/// the following variations are supported, where mappings are treated as conjunctions and
+/// Due to the nature of an identifier, they are essentially just variations on key/value
+/// pairs. The following variations are supported, where mappings are treated as conjunctions and
 /// sequences are treated as disjunctions:
 ///
 /// ```text
@@ -291,7 +291,8 @@ impl<'de> Deserialize<'de> for Detection {
 /// # K/V Pairs with multiple matches
 /// IDENTIFIER:
 ///     KEY:
-///     - MATCH
+///     - MATCH_0
+///     - MATCH_1
 ///
 /// # K/V Pairs (Grouped)
 /// IDENTIFIER:
@@ -303,7 +304,7 @@ impl<'de> Deserialize<'de> for Detection {
 ///         KEY: MATCH
 /// ```
 ///
-/// Identifiers are unique keys that can be reference in the `condition`.
+/// Identifiers are unique keys that can be referenced in the `condition`.
 ///
 /// Keys are used to get the values from documents. Keys can be wrapped in the following modifiers:
 ///
@@ -318,13 +319,13 @@ impl<'de> Deserialize<'de> for Detection {
 ///         <tr>
 ///             <td><code>all(k)</code></td>
 ///             <td>
-///                 <span>An key mutator that evaluates to true only if all matches for keys <code>k</code> match.</span>
+///                 <span>A key mutator that evaluates to true only if all matches for keys <code>k</code> match.</span>
 ///             </td>
 ///         </tr>
 ///         <tr>
 ///             <td><code style="white-space:nowrap">of(k, x)</code></td>
 ///             <td>
-///                 <span>An key mutator that evaluates to true only if a minimum of <code>x</code> matches for key <code>k</code> match.</span>
+///                 <span>A key mutator that evaluates to true only if a minimum of <code>x</code> matches for key <code>k</code> match.</span>
 ///             </td>
 ///         </tr>
 ///     </tbody>
@@ -372,7 +373,7 @@ impl<'de> Deserialize<'de> for Detection {
 ///
 /// # Examples
 ///
-/// Here is a very simple rule:
+/// Here is a very simple rule example:
 ///
 /// ```text
 /// detection:
@@ -397,7 +398,7 @@ impl<'de> Deserialize<'de> for Detection {
 ///   foobar: barfoo
 /// ```
 ///
-/// Here is a slightly more complex rule:
+/// Here is a slightly more complex rule example:
 ///
 /// ```text
 /// detection:

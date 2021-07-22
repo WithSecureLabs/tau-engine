@@ -476,7 +476,7 @@ where
 /// # Find
 ///
 /// The `find` function allows for nested access from an `Object`. A default implementation is
-/// provided by the trait which assumes the key will split on `.`. This can be override if
+/// provided by the trait which assumes the key will split on the `.` character. This can be overriden if
 /// required. Below is an example of how find works for a complex data structure.
 ///
 /// ```

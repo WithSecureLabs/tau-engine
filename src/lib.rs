@@ -1,6 +1,7 @@
 //! # Tau Engine
 //!
-//! This crate provides a library that tags documents by running rules over them.
+//! This crate provides a library that tags documents by running rules over them and matching on
+//! the specificed rule logic.
 //! The engine makes use of a Pratt parser and a tree solver in order to evaluate the detection
 //! logic of a rule against a document, if the outcome is true the document is considered tagged by
 //! that rule.
@@ -30,8 +31,11 @@
 //! - `*foobar*`: contains foobar
 //! - `?foobar`: regex foobar
 //!
-//! Any of the above can be made case insensitive with the `i` prefix.</br>
-//! Escaping can be achieved with a combination of `'` & `"`.
+//! Any of the above can be made case insensitive with the `i` prefix, for example:
+//! - `ifoobar`
+//! - `ifoobar*`
+//!
+//! Escaping can be achieved with a combination of `'` and `"`.
 //!
 //! ### Condition
 //!
@@ -65,14 +69,13 @@
 //!
 //! ## Documents
 //!
-//! A document is that can return data to the engine in a meaningful way, usually through Key/Value
+//! A document is anything that can provide data to the engine in a meaningful way, usually through Key/Value
 //! pairs, i.e: an event log, json object, yaml file, etc. Implementations are achieved with the
 //! [`Document`](Document) trait.
 //!
 //! ## Solving
 //!
-//! This is the process of tagging a document against a rule, or to put differently the process of
-//! evaluating a rule over a document.
+//! This is an example of how you can tag a document against a provided rule:
 //!
 //! ```
 //! use std::borrow::Cow;
@@ -122,7 +125,7 @@
 //! The following are a list of features that can be enabled or disabled:
 //! - **ignore_case**: Force the engine to always be case insensitive, this will ignore
 //! the `i` prefix and for that reason is not compatible with case sensitive rules.
-//! - **json**: Enable serde json support, the tau-engine will be able to solve on
+//! - **json**: Enable serde json support, this will allow the tau-engine to solve on
 //! `serde_json::Value`.
 //!
 //!
