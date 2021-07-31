@@ -1,0 +1,11 @@
+detection:
+  A:
+    '#phrase': "*quick*"
+
+  condition: A
+
+true_positives:
+  - '#phrase': the quick brown fox jumps over the lazy dog
+
+true_negatives:
+  - '#phrase': lorem ipsum dolor sit amet

@@ -149,7 +149,7 @@ impl Tokeniser for String {
                     let integer = integer.parse().map_err(crate::error::token_invalid_num)?;
                     tokens.push(Token::Integer(integer));
                 }
-                'a'..='z' | 'A'..='Z' => {
+                'a'..='z' | 'A'..='Z' | '#' => {
                     if match_ahead(&mut it, "int(") {
                         tokens.push(Token::Miscellaneous(MiscSym::Int));
                         it.nth(2);
@@ -176,10 +176,11 @@ impl Tokeniser for String {
                         tokens.push(Token::Match(MatchSym::Of));
                         it.nth(1);
                     } else {
-                        let identifier: String =
-                            consume_while(&mut it, |a| a.is_alphanumeric() || a == '_' || a == '.')
-                                .into_iter()
-                                .collect();
+                        let identifier: String = consume_while(&mut it, |a| {
+                            a.is_alphanumeric() || a == '_' || a == '.' || a == '#'
+                        })
+                        .into_iter()
+                        .collect();
                         tokens.push(Token::Identifier(identifier));
                     }
                 }
