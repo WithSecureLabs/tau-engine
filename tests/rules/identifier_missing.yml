@@ -1,0 +1,8 @@
+detection:
+  condition: foo or bar
+  foo:
+    a: x
+  baz:
+    b: y
+true_positives: []
+true_negatives: []

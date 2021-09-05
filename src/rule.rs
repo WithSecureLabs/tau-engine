@@ -8,7 +8,7 @@ use serde_yaml::Value as Yaml;
 use crate::document::Document;
 use crate::parser::{self, Expression};
 use crate::solver;
-use crate::tokeniser::Tokeniser;
+use crate::tokeniser::{MiscSym, Token, Tokeniser};
 
 /// The detection block, this contains the logic that is to be run through the solver to evaluate a
 /// `Document`.
@@ -94,6 +94,34 @@ impl<'de> Deserialize<'de> for Detection {
                         )));
                     }
                 };
+
+                // Loop through the tokens making sure that all identifiers are present, this is a
+                // pain because we need to ignore fields... For now we can just check for misc
+                // symbol prefix and skip those if present
+                let mut i = 0;
+                for token in &tokens {
+                    if i > 1 {
+                        if let Token::Miscellaneous(m) = &tokens[i - 2] {
+                            match m {
+                                MiscSym::Int | MiscSym::Str => {
+                                    i += 1;
+                                    continue;
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    if let Token::Identifier(id) = token {
+                        if !identifiers.contains_key(id) {
+                            return Err(de::Error::custom(format_args!(
+                                "invalid condition: identifier not found - {}",
+                                id
+                            )));
+                        }
+                    }
+                    i += 1;
+                }
+
                 let expression = match parser::parse(&tokens) {
                     Ok(expression) => expression,
                     Err(err) => {

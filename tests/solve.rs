@@ -5,7 +5,7 @@ macro_rules! solve_rule {
         paste::item! {
             #[test]
             fn [< solve_ $rule >] () {
-                let rule = common::load_rule($rule);
+                let rule = common::load_rule($rule).expect("invalid rule");
                 assert_eq!(rule.validate().unwrap(), true);
             }
         }
