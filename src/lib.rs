@@ -10,8 +10,8 @@
 //!
 //! A rule is used to tag a document and is made up of three parts:
 //! - `detection`: the logic used to evaluate a document.
-//! - `true positive`: an example document that must evaluate to true for the given detection.
-//! - `true negative`: an example document that must evaluate to false for the given detection.
+//! - `true positives`: example documents that must evaluate to true for the given detection.
+//! - `true negatives`: example documents that must evaluate to false for the given detection.
 //!
 //! The detection block is made up of a condition, and identifiers. This allows for simple but
 //! expressive rules, below is a brief summary (see [Rules](Rule) for more):
