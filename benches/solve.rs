@@ -73,6 +73,7 @@ bench_test!("boolean_expression_less_than_or_equal");
 bench_test!("boolean_expression_or");
 bench_test!("cast_int");
 bench_test!("cast_str");
+bench_test!("float");
 bench_test!("identifier");
 bench_test!("integer");
 bench_test!("match_all");

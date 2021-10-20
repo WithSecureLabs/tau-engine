@@ -26,6 +26,7 @@ solve_rule!("boolean_expression_or");
 solve_rule!("cast_int");
 solve_rule!("cast_str");
 solve_rule!("hash");
+solve_rule!("float");
 solve_rule!("identifier");
 solve_rule!("integer");
 solve_rule!("match_all");
