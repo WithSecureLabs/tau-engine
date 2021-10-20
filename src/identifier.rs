@@ -7,12 +7,16 @@ pub enum Pattern {
     Any,
     // `*foo*`
     Contains(String),
-    // `=1`
-    Equal(i64),
     // `*foo`
     EndsWith(String),
     // `foo`
     Exact(String),
+    // `foo*`
+    StartsWith(String),
+    // `?foo`
+    Regex(Regex),
+    // `=1`
+    Equal(i64),
     // `>1`
     GreaterThan(i64),
     // `>=1`
@@ -21,10 +25,16 @@ pub enum Pattern {
     LessThan(i64),
     // `<=1`
     LessThanOrEqual(i64),
-    // `?foo`
-    Regex(Regex),
-    // `foo*`
-    StartsWith(String),
+    // `=1.0`
+    FEqual(f64),
+    // `>1`
+    FGreaterThan(f64),
+    // `>=1`
+    FGreaterThanOrEqual(f64),
+    // `<1`
+    FLessThan(f64),
+    // `<=1`
+    FLessThanOrEqual(f64),
 }
 
 // An identifier containing its pattern and case options
@@ -57,30 +67,65 @@ impl IdentifierParser for String {
                     .map_err(crate::error::parse_invalid_ident)?,
             )
         } else if let Some(s) = string.strip_prefix(">=") {
-            Pattern::GreaterThanOrEqual(
-                s.parse::<i64>()
-                    .map_err(crate::error::parse_invalid_ident)?,
-            )
+            if s.contains(".") {
+                Pattern::FGreaterThanOrEqual(
+                    s.parse::<f64>()
+                        .map_err(crate::error::parse_invalid_ident)?,
+                )
+            } else {
+                Pattern::GreaterThanOrEqual(
+                    s.parse::<i64>()
+                        .map_err(crate::error::parse_invalid_ident)?,
+                )
+            }
         } else if let Some(s) = string.strip_prefix('>') {
-            Pattern::GreaterThan(
-                s.parse::<i64>()
-                    .map_err(crate::error::parse_invalid_ident)?,
-            )
+            if s.contains(".") {
+                Pattern::FGreaterThan(
+                    s.parse::<f64>()
+                        .map_err(crate::error::parse_invalid_ident)?,
+                )
+            } else {
+                Pattern::GreaterThan(
+                    s.parse::<i64>()
+                        .map_err(crate::error::parse_invalid_ident)?,
+                )
+            }
         } else if let Some(s) = string.strip_prefix("<=") {
-            Pattern::LessThanOrEqual(
-                s.parse::<i64>()
-                    .map_err(crate::error::parse_invalid_ident)?,
-            )
+            if s.contains(".") {
+                Pattern::FLessThanOrEqual(
+                    s.parse::<f64>()
+                        .map_err(crate::error::parse_invalid_ident)?,
+                )
+            } else {
+                Pattern::LessThanOrEqual(
+                    s.parse::<i64>()
+                        .map_err(crate::error::parse_invalid_ident)?,
+                )
+            }
         } else if let Some(s) = string.strip_prefix('<') {
-            Pattern::LessThan(
-                s.parse::<i64>()
-                    .map_err(crate::error::parse_invalid_ident)?,
-            )
+            if s.contains(".") {
+                Pattern::FLessThan(
+                    s.parse::<f64>()
+                        .map_err(crate::error::parse_invalid_ident)?,
+                )
+            } else {
+                Pattern::LessThan(
+                    s.parse::<i64>()
+                        .map_err(crate::error::parse_invalid_ident)?,
+                )
+            }
         } else if let Some(s) = string.strip_prefix('=') {
-            Pattern::Equal(
-                s.parse::<i64>()
-                    .map_err(crate::error::parse_invalid_ident)?,
-            )
+            if s.contains(".") {
+                Pattern::FEqual(
+                    s.parse::<f64>()
+                        .map_err(crate::error::parse_invalid_ident)?,
+                )
+            } else {
+                Pattern::Equal(
+                    s.parse::<i64>()
+                        .map_err(crate::error::parse_invalid_ident)?,
+                )
+            }
         } else if string == "*" {
             Pattern::Any
         } else if string.starts_with('*') && string.ends_with('*') {

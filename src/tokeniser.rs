@@ -80,6 +80,7 @@ pub enum MatchSym {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token {
     Delimiter(DelSym),
+    Float(f64),
     Identifier(String),
     Integer(i64),
     Operator(BoolSym),
@@ -106,7 +107,7 @@ impl Token {
             Token::Match(ref s) => match *s {
                 MatchSym::All | MatchSym::Of => 60,
             },
-            Token::Delimiter(_) | Token::Identifier(_) | Token::Integer(_) => 0,
+            Token::Delimiter(_) | Token::Float(_) | Token::Identifier(_) | Token::Integer(_) => 0,
         }
     }
 }
@@ -141,13 +142,18 @@ impl Tokeniser for String {
         let mut tokens: Vec<Token> = vec![];
         while let Some(&c) = it.peek() {
             match c {
-                '-' | '0'..='9' => {
+                '.' | '-' | '0'..='9' => {
                     // A number
-                    let integer: String = consume_while(&mut it, |a| a.is_numeric())
+                    let number: String = consume_while(&mut it, |a| a.is_numeric() || a == '.')
                         .into_iter()
                         .collect();
-                    let integer = integer.parse().map_err(crate::error::token_invalid_num)?;
-                    tokens.push(Token::Integer(integer));
+                    if number.contains('.') {
+                        let float = number.parse().map_err(crate::error::token_invalid_num)?;
+                        tokens.push(Token::Float(float));
+                    } else {
+                        let integer = number.parse().map_err(crate::error::token_invalid_num)?;
+                        tokens.push(Token::Integer(integer));
+                    }
                 }
                 'a'..='z' | 'A'..='Z' => {
                     if match_ahead(&mut it, "int(") {

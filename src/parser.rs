@@ -72,6 +72,7 @@ pub enum Expression {
     Boolean(bool),
     Cast(String, MiscSym),
     Field(String),
+    Float(f64),
     Identifier(String),
     Integer(i64),
     Match(Match, Box<Expression>),
@@ -96,6 +97,7 @@ impl fmt::Display for Expression {
             Self::Boolean(b) => write!(f, "bool({})", b),
             Self::Cast(s, t) => write!(f, "cast({}({}))", t, s),
             Self::Field(s) => write!(f, "field({})", s),
+            Self::Float(n) => write!(f, "float({})", n),
             Self::Identifier(s) => write!(f, "identifier({})", s),
             Self::Integer(i) => write!(f, "int({})", i),
             Self::Match(Match::All, e) => {
@@ -250,6 +252,7 @@ where
                 ))
             }
             Token::Delimiter(_)
+            | Token::Float(_)
             | Token::Identifier(_)
             | Token::Integer(_)
             | Token::Miscellaneous(_)
@@ -292,6 +295,7 @@ where
                         crate::error::parse_invalid_token(format!("NUD encountered - '{:?}'", t)),
                     ),
                 },
+                Token::Float(ref n) => Ok(Expression::Float(*n)),
                 Token::Identifier(ref n) => Ok(Expression::Identifier(n.to_string())),
                 Token::Integer(ref n) => Ok(Expression::Integer(*n)),
                 Token::Miscellaneous(ref m) => match *m {
@@ -686,9 +690,17 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                     );
                     expressions.push(expr);
                     continue;
+                } else if let Some(i) = n.as_f64() {
+                    let expr = Expression::BooleanExpression(
+                        Box::new(e.clone()),
+                        BoolSym::Equal,
+                        Box::new(Expression::Float(i)),
+                    );
+                    expressions.push(expr);
+                    continue;
                 }
                 return Err(crate::error::parse_invalid_ident(format!(
-                    "number must be a signed integer, encountered - {:?}",
+                    "number must be a signed integer or float, encountered - {:?}",
                     k
                 )));
             }
@@ -727,6 +739,31 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         Box::new(e.clone()),
                         BoolSym::LessThanOrEqual,
                         Box::new(Expression::Integer(i)),
+                    ),
+                    Pattern::FEqual(i) => Expression::BooleanExpression(
+                        Box::new(e.clone()),
+                        BoolSym::Equal,
+                        Box::new(Expression::Float(i)),
+                    ),
+                    Pattern::FGreaterThan(i) => Expression::BooleanExpression(
+                        Box::new(e.clone()),
+                        BoolSym::GreaterThan,
+                        Box::new(Expression::Float(i)),
+                    ),
+                    Pattern::FGreaterThanOrEqual(i) => Expression::BooleanExpression(
+                        Box::new(e.clone()),
+                        BoolSym::GreaterThanOrEqual,
+                        Box::new(Expression::Float(i)),
+                    ),
+                    Pattern::FLessThan(i) => Expression::BooleanExpression(
+                        Box::new(e.clone()),
+                        BoolSym::LessThan,
+                        Box::new(Expression::Float(i)),
+                    ),
+                    Pattern::FLessThanOrEqual(i) => Expression::BooleanExpression(
+                        Box::new(e.clone()),
+                        BoolSym::LessThanOrEqual,
+                        Box::new(Expression::Float(i)),
                     ),
                     Pattern::Any => Expression::Search(Search::Any, f.to_owned()),
                     Pattern::Regex(c) => Expression::Search(Search::Regex(c), f.to_owned()),
@@ -842,9 +879,17 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                                     Box::new(Expression::Integer(i)),
                                 ));
                                 continue;
+                            } else if let Some(i) = n.as_f64() {
+                                let expr = Expression::BooleanExpression(
+                                    Box::new(e.clone()),
+                                    BoolSym::Equal,
+                                    Box::new(Expression::Float(i)),
+                                );
+                                expressions.push(expr);
+                                continue;
                             }
                             return Err(crate::error::parse_invalid_ident(format!(
-                                "number must be a signed integer, encountered - {:?}",
+                                "number must be a signed integer or float, encountered - {:?}",
                                 k
                             )));
                         }
@@ -894,6 +939,33 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                             Box::new(e.clone()),
                             BoolSym::LessThanOrEqual,
                             Box::new(Expression::Integer(i)),
+                        )),
+                        Pattern::FEqual(i) => rest.push(Expression::BooleanExpression(
+                            Box::new(e.clone()),
+                            BoolSym::Equal,
+                            Box::new(Expression::Float(i)),
+                        )),
+                        Pattern::FGreaterThan(i) => rest.push(Expression::BooleanExpression(
+                            Box::new(e.clone()),
+                            BoolSym::GreaterThan,
+                            Box::new(Expression::Float(i)),
+                        )),
+                        Pattern::FGreaterThanOrEqual(i) => {
+                            rest.push(Expression::BooleanExpression(
+                                Box::new(e.clone()),
+                                BoolSym::GreaterThanOrEqual,
+                                Box::new(Expression::Float(i)),
+                            ))
+                        }
+                        Pattern::FLessThan(i) => rest.push(Expression::BooleanExpression(
+                            Box::new(e.clone()),
+                            BoolSym::LessThan,
+                            Box::new(Expression::Float(i)),
+                        )),
+                        Pattern::FLessThanOrEqual(i) => rest.push(Expression::BooleanExpression(
+                            Box::new(e.clone()),
+                            BoolSym::LessThanOrEqual,
+                            Box::new(Expression::Float(i)),
                         )),
                     }
                 }
