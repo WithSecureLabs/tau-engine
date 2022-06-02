@@ -194,6 +194,7 @@ mod yaml;
 pub mod core {
     /// Exposes some of Tau Engine's internal parsing so that Expressions can be built by hand.
     pub mod parser {
+        pub use crate::identifier::*;
         pub use crate::parser::*;
     }
 
