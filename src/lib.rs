@@ -122,6 +122,7 @@
 //! ## Features
 //!
 //! The following are a list of features that can be enabled or disabled:
+//! - **core**: Exposes some of Tau Engine's internals.
 //! - **ignore_case**: Force the engine to always be case insensitive, this will ignore
 //! the `i` prefix and for that reason is not compatible with case sensitive rules.
 //! - **json**: Enable serde json support, this will allow the tau-engine to solve on
@@ -187,3 +188,50 @@ mod solver;
 mod tokeniser;
 mod value;
 mod yaml;
+
+#[cfg(feature = "core")]
+/// Exposes some of Tau Engine's internals.
+pub mod core {
+    /// Exposes some of Tau Engine's internal parsing so that Expressions can be built by hand.
+    pub mod parser {
+        pub use crate::parser::*;
+    }
+
+    use std::collections::HashMap;
+
+    use crate::document::Document;
+    use crate::parser::Expression;
+    use crate::solver::SolverResult;
+
+    lazy_static::lazy_static! {
+        static ref IDENTIFIERS: HashMap<String, Expression> = HashMap::new();
+    }
+
+    /// Evaluates a `Document` with the provided expression.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if an invalid expression is provided
+    pub fn solve(expression: &Expression, document: &dyn Document) -> bool {
+        match super::solver::solve_expression(&expression, &IDENTIFIERS, document) {
+            SolverResult::True => true,
+            SolverResult::False | SolverResult::Missing => false,
+        }
+    }
+
+    /// Evaluates a `Document` with the provided expression, and identifiers.
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if an invalid expression is provided
+    pub fn solve_expression(
+        expression: &Expression,
+        identifiers: &HashMap<String, Expression>,
+        document: &dyn Document,
+    ) -> bool {
+        match super::solver::solve_expression(&expression, &identifiers, document) {
+            SolverResult::True => true,
+            SolverResult::False | SolverResult::Missing => false,
+        }
+    }
+}

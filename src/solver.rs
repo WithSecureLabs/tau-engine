@@ -11,7 +11,7 @@ use crate::tokeniser::{BoolSym, MiscSym};
 use crate::value::Value;
 
 #[derive(Debug, PartialEq)]
-enum SolverResult {
+pub(crate) enum SolverResult {
     True,
     False,
     Missing,
@@ -34,7 +34,7 @@ pub fn solve(detection: &Detection, document: &dyn Document) -> bool {
     }
 }
 
-fn solve_expression(
+pub(crate) fn solve_expression(
     expression: &Expression,
     identifiers: &HashMap<String, Expression>,
     document: &dyn Document,

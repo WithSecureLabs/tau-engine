@@ -117,7 +117,7 @@ impl fmt::Display for Expression {
 // Left-Denotation (LED) - how an operator consumes to the right with a left-context
 // Null-Denotation (NUD) - how an operator consumes to the right with no left-context
 
-pub fn parse(tokens: &[Token]) -> crate::Result<Expression> {
+pub(crate) fn parse(tokens: &[Token]) -> crate::Result<Expression> {
     let mut it = tokens.iter().peekable();
     let expression = parse_expr(&mut it, 0)?;
     if it.peek().is_some() {
