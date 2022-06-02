@@ -278,7 +278,7 @@ where
                         // the matching right parenthesis
                         let mut tokens: Vec<Token> = vec![];
                         let mut depth = 1;
-                        while let Some(t) = it.next() {
+                        for t in it.by_ref() {
                             if t == &Token::Delimiter(DelSym::LeftParenthesis) {
                                 depth += 1;
                             } else if t == &Token::Delimiter(DelSym::RightParenthesis) {
@@ -289,7 +289,7 @@ where
                             }
                             tokens.push(t.clone());
                         }
-                        parse(&&tokens)
+                        parse(&tokens)
                     }
                     DelSym::Comma | DelSym::RightParenthesis => Err(
                         crate::error::parse_invalid_token(format!("NUD encountered - '{:?}'", t)),
@@ -575,7 +575,7 @@ pub fn parse_identifier(yaml: &Yaml) -> crate::Result<Expression> {
             match it.next() {
                 Some(v) => match &v {
                     Yaml::Mapping(m) => {
-                        let mut expressions = vec![parse_mapping(&m)?];
+                        let mut expressions = vec![parse_mapping(m)?];
                         for value in it {
                             // NOTE: A sequence can only be one type
                             if let Yaml::Mapping(mapping) = value {
@@ -800,7 +800,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         f.to_owned(),
                     ),
                     Pattern::Exact(c) => Expression::Search(
-                        if c != "" && identifier.ignore_case {
+                        if !c.is_empty() && identifier.ignore_case {
                             Search::AhoCorasick(
                                 Box::new(
                                     AhoCorasickBuilder::new()

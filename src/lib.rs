@@ -213,7 +213,7 @@ pub mod core {
     ///
     /// This method will panic if an invalid expression is provided
     pub fn solve(expression: &Expression, document: &dyn Document) -> bool {
-        match super::solver::solve_expression(&expression, &IDENTIFIERS, document) {
+        match super::solver::solve_expression(expression, &IDENTIFIERS, document) {
             SolverResult::True => true,
             SolverResult::False | SolverResult::Missing => false,
         }
@@ -229,7 +229,7 @@ pub mod core {
         identifiers: &HashMap<String, Expression>,
         document: &dyn Document,
     ) -> bool {
-        match super::solver::solve_expression(&expression, &identifiers, document) {
+        match super::solver::solve_expression(expression, identifiers, document) {
             SolverResult::True => true,
             SolverResult::False | SolverResult::Missing => false,
         }

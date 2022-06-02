@@ -67,7 +67,7 @@ impl IdentifierParser for String {
                     .map_err(crate::error::parse_invalid_ident)?,
             )
         } else if let Some(s) = string.strip_prefix(">=") {
-            if s.contains(".") {
+            if s.contains('.') {
                 Pattern::FGreaterThanOrEqual(
                     s.parse::<f64>()
                         .map_err(crate::error::parse_invalid_ident)?,
@@ -79,7 +79,7 @@ impl IdentifierParser for String {
                 )
             }
         } else if let Some(s) = string.strip_prefix('>') {
-            if s.contains(".") {
+            if s.contains('.') {
                 Pattern::FGreaterThan(
                     s.parse::<f64>()
                         .map_err(crate::error::parse_invalid_ident)?,
@@ -91,7 +91,7 @@ impl IdentifierParser for String {
                 )
             }
         } else if let Some(s) = string.strip_prefix("<=") {
-            if s.contains(".") {
+            if s.contains('.') {
                 Pattern::FLessThanOrEqual(
                     s.parse::<f64>()
                         .map_err(crate::error::parse_invalid_ident)?,
@@ -103,7 +103,7 @@ impl IdentifierParser for String {
                 )
             }
         } else if let Some(s) = string.strip_prefix('<') {
-            if s.contains(".") {
+            if s.contains('.') {
                 Pattern::FLessThan(
                     s.parse::<f64>()
                         .map_err(crate::error::parse_invalid_ident)?,
@@ -115,7 +115,7 @@ impl IdentifierParser for String {
                 )
             }
         } else if let Some(s) = string.strip_prefix('=') {
-            if s.contains(".") {
+            if s.contains('.') {
                 Pattern::FEqual(
                     s.parse::<f64>()
                         .map_err(crate::error::parse_invalid_ident)?,
