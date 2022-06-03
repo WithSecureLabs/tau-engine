@@ -198,6 +198,7 @@ pub mod core {
         pub use crate::parser::*;
         pub use crate::tokeniser::*;
     }
+    pub use crate::rule::Detection;
 
     use std::collections::HashMap;
 
