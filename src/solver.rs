@@ -267,6 +267,7 @@ pub(crate) fn solve_expression(
                                         return SolverResult::Missing;
                                     }
                                 };
+                                // TODO: Don't cast to string first...
                                 match i.to_string() {
                                     Some(v) => match v.parse::<i64>() {
                                         Ok(i) => i,
@@ -435,7 +436,7 @@ pub(crate) fn solve_expression(
             };
             for expression in group {
                 // NOTE: Because of needle optimisation we have to handle aho in a `slow` fashion here...
-                if let Expression::Search(Search::AhoCorasick(a, m), i) = expression {
+                if let Expression::Search(Search::AhoCorasick(a, m), i, c) = expression {
                     let value = match document.find(i) {
                         Some(v) => v,
                         None => {
@@ -443,17 +444,29 @@ pub(crate) fn solve_expression(
                             return SolverResult::Missing;
                         }
                     };
-                    match value {
-                        Value::String(ref x) => {
+                    match (value, c) {
+                        (Value::String(ref x), _) => {
                             if slow_aho(a, m, x) != m.len() as u64 {
                                 return SolverResult::False;
                             }
                         }
-                        Value::Array(x) => {
+                        (Value::Array(x), _) => {
                             let mut found = false;
                             for v in x.iter() {
                                 if let Some(x) = v.as_str() {
                                     if slow_aho(a, m, x) == m.len() as u64 {
+                                        found = true;
+                                        break;
+                                    }
+                                } else if *c {
+                                    let x = match v {
+                                        Value::Bool(x) => x.to_string(),
+                                        Value::Float(x) => x.to_string(),
+                                        Value::Int(x) => x.to_string(),
+                                        Value::UInt(x) => x.to_string(),
+                                        _ => continue,
+                                    };
+                                    if slow_aho(a, m, x.as_str()) == m.len() as u64 {
                                         found = true;
                                         break;
                                     }
@@ -463,7 +476,31 @@ pub(crate) fn solve_expression(
                                 return SolverResult::False;
                             }
                         }
-                        _ => {
+                        (Value::Bool(x), true) => {
+                            let x = x.to_string();
+                            if slow_aho(a, m, x.as_str()) != m.len() as u64 {
+                                return SolverResult::False;
+                            }
+                        }
+                        (Value::Float(x), true) => {
+                            let x = x.to_string();
+                            if slow_aho(a, m, x.as_str()) != m.len() as u64 {
+                                return SolverResult::False;
+                            }
+                        }
+                        (Value::Int(x), true) => {
+                            let x = x.to_string();
+                            if slow_aho(a, m, x.as_str()) != m.len() as u64 {
+                                return SolverResult::False;
+                            }
+                        }
+                        (Value::UInt(x), true) => {
+                            let x = x.to_string();
+                            if slow_aho(a, m, x.as_str()) != m.len() as u64 {
+                                return SolverResult::False;
+                            }
+                        }
+                        (_, _) => {
                             debug!(
                                 "evaluating false, field is not an array of strings, or a string for {}",
                                 expression
@@ -471,7 +508,7 @@ pub(crate) fn solve_expression(
                             return SolverResult::Missing;
                         }
                     }
-                } else if let Expression::Search(Search::RegexSet(s), i) = expression {
+                } else if let Expression::Search(Search::RegexSet(s), i, c) = expression {
                     let value = match document.find(i) {
                         Some(v) => v,
                         None => {
@@ -479,8 +516,8 @@ pub(crate) fn solve_expression(
                             return SolverResult::Missing;
                         }
                     };
-                    match value {
-                        Value::String(ref x) => {
+                    match (value, c) {
+                        (Value::String(ref x), _) => {
                             let mut hits = 0;
                             for _ in s.matches(x).iter() {
                                 hits += 1;
@@ -489,7 +526,7 @@ pub(crate) fn solve_expression(
                                 return SolverResult::False;
                             }
                         }
-                        Value::Array(x) => {
+                        (Value::Array(x), _) => {
                             let mut found = false;
                             for v in x.iter() {
                                 if let Some(x) = v.as_str() {
@@ -501,9 +538,65 @@ pub(crate) fn solve_expression(
                                         found = true;
                                         break;
                                     }
+                                } else if *c {
+                                    let x = match v {
+                                        Value::Bool(x) => x.to_string(),
+                                        Value::Float(x) => x.to_string(),
+                                        Value::Int(x) => x.to_string(),
+                                        Value::UInt(x) => x.to_string(),
+                                        _ => continue,
+                                    };
+                                    let mut hits = 0;
+                                    for _ in s.matches(x.as_str()).iter() {
+                                        hits += 1;
+                                    }
+                                    if hits == s.patterns().len() {
+                                        found = true;
+                                        break;
+                                    }
                                 }
                             }
                             if !found {
+                                return SolverResult::False;
+                            }
+                        }
+                        (Value::Bool(x), true) => {
+                            let x = x.to_string();
+                            let mut hits = 0;
+                            for _ in s.matches(x.as_str()).iter() {
+                                hits += 1;
+                            }
+                            if hits != s.patterns().len() {
+                                return SolverResult::False;
+                            }
+                        }
+                        (Value::Float(x), true) => {
+                            let x = x.to_string();
+                            let mut hits = 0;
+                            for _ in s.matches(x.as_str()).iter() {
+                                hits += 1;
+                            }
+                            if hits != s.patterns().len() {
+                                return SolverResult::False;
+                            }
+                        }
+                        (Value::Int(x), true) => {
+                            let x = x.to_string();
+                            let mut hits = 0;
+                            for _ in s.matches(x.as_str()).iter() {
+                                hits += 1;
+                            }
+                            if hits != s.patterns().len() {
+                                return SolverResult::False;
+                            }
+                        }
+                        (Value::UInt(x), true) => {
+                            let x = x.to_string();
+                            let mut hits = 0;
+                            for _ in s.matches(x.as_str()).iter() {
+                                hits += 1;
+                            }
+                            if hits != s.patterns().len() {
                                 return SolverResult::False;
                             }
                         }
@@ -541,7 +634,7 @@ pub(crate) fn solve_expression(
             let mut res = SolverResult::Missing;
             for expression in group {
                 // NOTE: Because of needle optimisation we have to handle aho in a `slow` fashion here...
-                if let Expression::Search(Search::AhoCorasick(a, m), i) = expression {
+                if let Expression::Search(Search::AhoCorasick(a, m), i, cast) = expression {
                     let value = match document.find(i) {
                         Some(v) => v,
                         None => {
@@ -549,14 +642,14 @@ pub(crate) fn solve_expression(
                             return SolverResult::Missing;
                         }
                     };
-                    match value {
-                        Value::String(ref x) => {
+                    match (value, cast) {
+                        (Value::String(ref x), _) => {
                             count += slow_aho(a, m, x);
                             if count >= c {
                                 return SolverResult::True;
                             }
                         }
-                        Value::Array(x) => {
+                        (Value::Array(x), _) => {
                             let mut max = 0;
                             for v in x.iter() {
                                 if let Some(x) = v.as_str() {
@@ -566,9 +659,51 @@ pub(crate) fn solve_expression(
                                     } else if hits > max {
                                         max = hits;
                                     }
+                                } else if *cast {
+                                    let x = match v {
+                                        Value::Bool(x) => x.to_string(),
+                                        Value::Float(x) => x.to_string(),
+                                        Value::Int(x) => x.to_string(),
+                                        Value::UInt(x) => x.to_string(),
+                                        _ => continue,
+                                    };
+                                    let hits = slow_aho(a, m, x.as_str());
+                                    if count + hits >= c {
+                                        return SolverResult::True;
+                                    } else if hits > max {
+                                        max = hits;
+                                    }
                                 }
                             }
                             count += max;
+                        }
+                        (Value::Bool(x), true) => {
+                            let x = x.to_string();
+                            count += slow_aho(a, m, x.as_str());
+                            if count >= c {
+                                return SolverResult::True;
+                            }
+                        }
+                        (Value::Float(x), true) => {
+                            let x = x.to_string();
+                            count += slow_aho(a, m, x.as_str());
+                            if count >= c {
+                                return SolverResult::True;
+                            }
+                        }
+                        (Value::Int(x), true) => {
+                            let x = x.to_string();
+                            count += slow_aho(a, m, x.as_str());
+                            if count >= c {
+                                return SolverResult::True;
+                            }
+                        }
+                        (Value::UInt(x), true) => {
+                            let x = x.to_string();
+                            count += slow_aho(a, m, x.as_str());
+                            if count >= c {
+                                return SolverResult::True;
+                            }
                         }
                         _ => {
                             debug!(
@@ -578,7 +713,7 @@ pub(crate) fn solve_expression(
                             return SolverResult::Missing;
                         }
                     }
-                } else if let Expression::Search(Search::RegexSet(s), i) = expression {
+                } else if let Expression::Search(Search::RegexSet(s), i, cast) = expression {
                     let value = match document.find(i) {
                         Some(v) => v,
                         None => {
@@ -586,8 +721,8 @@ pub(crate) fn solve_expression(
                             return SolverResult::Missing;
                         }
                     };
-                    match value {
-                        Value::String(ref x) => {
+                    match (value, cast) {
+                        (Value::String(ref x), _) => {
                             for _ in s.matches(x).iter() {
                                 count += 1;
                             }
@@ -595,7 +730,7 @@ pub(crate) fn solve_expression(
                                 return SolverResult::True;
                             }
                         }
-                        Value::Array(x) => {
+                        (Value::Array(x), _) => {
                             let mut max = 0;
                             for v in x.iter() {
                                 if let Some(x) = v.as_str() {
@@ -608,9 +743,62 @@ pub(crate) fn solve_expression(
                                     } else if hits > max {
                                         max = hits;
                                     }
+                                } else if *cast {
+                                    let x = match v {
+                                        Value::Bool(x) => x.to_string(),
+                                        Value::Float(x) => x.to_string(),
+                                        Value::Int(x) => x.to_string(),
+                                        Value::UInt(x) => x.to_string(),
+                                        _ => continue,
+                                    };
+                                    let mut hits = 0;
+                                    for _ in s.matches(x.as_str()).iter() {
+                                        hits += 1;
+                                    }
+                                    if count + hits >= c {
+                                        return SolverResult::True;
+                                    } else if hits > max {
+                                        max = hits;
+                                    }
                                 }
                             }
                             count += max;
+                        }
+                        (Value::Bool(x), true) => {
+                            let x = x.to_string();
+                            for _ in s.matches(x.as_str()).iter() {
+                                count += 1;
+                            }
+                            if count >= c {
+                                return SolverResult::True;
+                            }
+                        }
+                        (Value::Float(x), true) => {
+                            let x = x.to_string();
+                            for _ in s.matches(x.as_str()).iter() {
+                                count += 1;
+                            }
+                            if count >= c {
+                                return SolverResult::True;
+                            }
+                        }
+                        (Value::Int(x), true) => {
+                            let x = x.to_string();
+                            for _ in s.matches(x.as_str()).iter() {
+                                count += 1;
+                            }
+                            if count >= c {
+                                return SolverResult::True;
+                            }
+                        }
+                        (Value::UInt(x), true) => {
+                            let x = x.to_string();
+                            for _ in s.matches(x.as_str()).iter() {
+                                count += 1;
+                            }
+                            if count >= c {
+                                return SolverResult::True;
+                            }
                         }
                         _ => {
                             debug!(
@@ -673,7 +861,7 @@ pub(crate) fn solve_expression(
                 }
             }
         }
-        Expression::Search(ref s, ref f) => {
+        Expression::Search(ref s, ref f, ref c) => {
             let value = match document.find(f) {
                 Some(v) => v,
                 None => {
@@ -681,9 +869,9 @@ pub(crate) fn solve_expression(
                     return SolverResult::Missing;
                 }
             };
-            let res = match value {
-                Value::String(ref x) => search(s, x),
-                Value::Array(a) => {
+            let res = match (value, c) {
+                (Value::String(ref x), _) => search(s, x),
+                (Value::Array(a), _) => {
                     let mut res = SolverResult::False;
                     for v in a.iter() {
                         if let Some(x) = v.as_str() {
@@ -691,9 +879,37 @@ pub(crate) fn solve_expression(
                                 res = SolverResult::True;
                                 break;
                             }
+                        } else if *c {
+                            let x = match v {
+                                Value::Bool(x) => x.to_string(),
+                                Value::Float(x) => x.to_string(),
+                                Value::Int(x) => x.to_string(),
+                                Value::UInt(x) => x.to_string(),
+                                _ => continue,
+                            };
+                            if search(s, x.as_str()) == SolverResult::True {
+                                res = SolverResult::True;
+                                break;
+                            }
                         }
                     }
                     res
+                }
+                (Value::Bool(x), true) => {
+                    let x = x.to_string();
+                    search(s, x.as_str())
+                }
+                (Value::Float(x), true) => {
+                    let x = x.to_string();
+                    search(s, x.as_str())
+                }
+                (Value::Int(x), true) => {
+                    let x = x.to_string();
+                    search(s, x.as_str())
+                }
+                (Value::UInt(x), true) => {
+                    let x = x.to_string();
+                    search(s, x.as_str())
                 }
                 _ => {
                     debug!(

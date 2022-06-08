@@ -79,7 +79,7 @@ pub enum Expression {
     Negate(Box<Expression>),
     Nested(String, Box<Expression>),
     Null,
-    Search(Search, String),
+    Search(Search, String, bool),
 }
 impl fmt::Display for Expression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -107,7 +107,7 @@ impl fmt::Display for Expression {
             Self::Negate(e) => write!(f, "negate({})", e),
             Self::Nested(s, e) => write!(f, "nested({}, {})", s, e),
             Self::Null => write!(f, "null"),
-            Self::Search(e, s) => write!(f, "search({}, {})", s, e),
+            Self::Search(e, s, c) => write!(f, "search({}, {}, {})", s, e, c),
         }
     }
 }
@@ -358,7 +358,7 @@ where
                             | Expression::Match(_, _)
                             | Expression::Negate(_)
                             | Expression::Nested(_, _)
-                            | Expression::Search(_, _) => {}
+                            | Expression::Search(_, _, _) => {}
                             _ => {
                                 return Err(crate::error::parse_invalid_token(
                                     "NUD expected a negatable expression",
@@ -607,9 +607,11 @@ pub fn parse_identifier(yaml: &Yaml) -> crate::Result<Expression> {
     }
 }
 
+// TODO: Extract common code and try to make this function a little bit more readable
 fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
     let mut expressions = vec![];
     for (k, v) in mapping {
+        let mut misc: Option<MiscSym> = None;
         let (e, f) = match k {
             Yaml::String(s) => {
                 // NOTE: Tokenise splits on whitespace, but this is undesired for keys, merge them
@@ -634,6 +636,14 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                 }
                 let expr = parse(&tokens)?;
                 let (e, s) = match expr {
+                    Expression::Cast(f, s) => {
+                        misc = Some(s.clone());
+                        match s {
+                            MiscSym::Int => (Expression::Cast(f.clone(), s), f),
+                            MiscSym::Not => (Expression::Field(f.clone()), f),
+                            MiscSym::Str => (Expression::Cast(f.clone(), s), f),
+                        }
+                    }
                     Expression::Identifier(s) => (Expression::Field(s.clone()), s),
                     Expression::Match(m, i) => {
                         if let Yaml::Sequence(_) = v {
@@ -672,49 +682,103 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                 )))
             }
         };
-        match v {
+        let expression = match v {
             Yaml::Bool(b) => {
-                let expr = Expression::BooleanExpression(
-                    Box::new(e.clone()),
-                    BoolSym::Equal,
-                    Box::new(Expression::Boolean(*b)),
-                );
-                expressions.push(expr);
+                if let Some(MiscSym::Int) = misc {
+                    Expression::BooleanExpression(
+                        Box::new(e.clone()),
+                        BoolSym::Equal,
+                        Box::new(Expression::Integer(if *b { 1 } else { 0 })),
+                    )
+                } else if let Some(MiscSym::Str) = misc {
+                    Expression::Search(Search::Exact(b.to_string()), f.to_owned(), true)
+                } else {
+                    Expression::BooleanExpression(
+                        Box::new(e.clone()),
+                        BoolSym::Equal,
+                        Box::new(Expression::Boolean(*b)),
+                    )
+                }
             }
             Yaml::Number(n) => {
                 if let Some(i) = n.as_i64() {
-                    let expr = Expression::BooleanExpression(
-                        Box::new(e.clone()),
-                        BoolSym::Equal,
-                        Box::new(Expression::Integer(i)),
-                    );
-                    expressions.push(expr);
-                    continue;
+                    if let Some(MiscSym::Str) = misc {
+                        Expression::Search(Search::Exact(i.to_string()), f.to_owned(), true)
+                    } else {
+                        Expression::BooleanExpression(
+                            Box::new(e.clone()),
+                            BoolSym::Equal,
+                            Box::new(Expression::Integer(i)),
+                        )
+                    }
                 } else if let Some(i) = n.as_f64() {
-                    let expr = Expression::BooleanExpression(
-                        Box::new(e.clone()),
-                        BoolSym::Equal,
-                        Box::new(Expression::Float(i)),
-                    );
-                    expressions.push(expr);
-                    continue;
+                    if let Some(MiscSym::Int) = misc {
+                        return Err(crate::error::parse_invalid_ident(format!(
+                            "float cannot be cast into an integer, encountered - {:?}",
+                            k
+                        )));
+                    } else if let Some(MiscSym::Str) = misc {
+                        Expression::Search(Search::Exact(i.to_string()), f.to_owned(), true)
+                    } else {
+                        Expression::BooleanExpression(
+                            Box::new(e.clone()),
+                            BoolSym::Equal,
+                            Box::new(Expression::Float(i)),
+                        )
+                    }
+                } else {
+                    return Err(crate::error::parse_invalid_ident(format!(
+                        "number must be a signed integer or float, encountered - {:?}",
+                        k
+                    )));
                 }
-                return Err(crate::error::parse_invalid_ident(format!(
-                    "number must be a signed integer or float, encountered - {:?}",
-                    k
-                )));
             }
-            Yaml::Null => {
-                let expr = Expression::BooleanExpression(
-                    Box::new(e.clone()),
-                    BoolSym::Equal,
-                    Box::new(Expression::Null),
-                );
-                expressions.push(expr);
-            }
+            Yaml::Null => Expression::BooleanExpression(
+                Box::new(e.clone()),
+                BoolSym::Equal,
+                Box::new(Expression::Null),
+            ),
             Yaml::String(ref s) => {
                 let identifier = s.to_owned().into_identifier()?;
-                let expr = match identifier.pattern {
+                let mut cast = false;
+                if let Some(ref m) = misc {
+                    if let MiscSym::Str = m {
+                        cast = true;
+                    }
+                    match &identifier.pattern {
+                        Pattern::Any
+                        | Pattern::Regex(_)
+                        | Pattern::Contains(_)
+                        | Pattern::EndsWith(_)
+                        | Pattern::Exact(_)
+                        | Pattern::StartsWith(_) => {
+                            if let MiscSym::Int = m {
+                                return Err(crate::error::parse_invalid_ident(format!(
+                                    "cannot cast string to integer, encountered - {:?}",
+                                    k
+                                )));
+                            }
+                        }
+                        Pattern::Equal(_)
+                        | Pattern::GreaterThan(_)
+                        | Pattern::GreaterThanOrEqual(_)
+                        | Pattern::LessThan(_)
+                        | Pattern::LessThanOrEqual(_)
+                        | Pattern::FEqual(_)
+                        | Pattern::FGreaterThan(_)
+                        | Pattern::FGreaterThanOrEqual(_)
+                        | Pattern::FLessThan(_)
+                        | Pattern::FLessThanOrEqual(_) => {
+                            if let MiscSym::Str = m {
+                                return Err(crate::error::parse_invalid_ident(format!(
+                                    "cannot cast integer to string, encountered - {:?}",
+                                    k
+                                )));
+                            }
+                        }
+                    }
+                }
+                match identifier.pattern {
                     Pattern::Equal(i) => Expression::BooleanExpression(
                         Box::new(e.clone()),
                         BoolSym::Equal,
@@ -765,8 +829,8 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         BoolSym::LessThanOrEqual,
                         Box::new(Expression::Float(i)),
                     ),
-                    Pattern::Any => Expression::Search(Search::Any, f.to_owned()),
-                    Pattern::Regex(c) => Expression::Search(Search::Regex(c), f.to_owned()),
+                    Pattern::Any => Expression::Search(Search::Any, f.to_owned(), cast),
+                    Pattern::Regex(c) => Expression::Search(Search::Regex(c), f.to_owned(), cast),
                     Pattern::Contains(c) => Expression::Search(
                         if identifier.ignore_case {
                             Search::AhoCorasick(
@@ -782,6 +846,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                             Search::Contains(c)
                         },
                         f.to_owned(),
+                        cast,
                     ),
                     Pattern::EndsWith(c) => Expression::Search(
                         if identifier.ignore_case {
@@ -798,6 +863,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                             Search::EndsWith(c)
                         },
                         f.to_owned(),
+                        cast,
                     ),
                     Pattern::Exact(c) => Expression::Search(
                         if !c.is_empty() && identifier.ignore_case {
@@ -814,6 +880,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                             Search::Exact(c)
                         },
                         f.to_owned(),
+                        cast,
                     ),
                     Pattern::StartsWith(c) => Expression::Search(
                         if identifier.ignore_case {
@@ -830,15 +897,18 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                             Search::StartsWith(c)
                         },
                         f.to_owned(),
+                        cast,
                     ),
-                };
-                expressions.push(expr);
+                }
             }
             Yaml::Mapping(ref m) => {
-                expressions.push(Expression::Nested(
-                    f.to_owned(),
-                    Box::new(parse_mapping(m)?),
-                ));
+                if misc.is_some() {
+                    return Err(crate::error::parse_invalid_ident(format!(
+                        "nested mappings are not supported when casting or negating a field, encountered - {:?}",
+                        k
+                    )));
+                }
+                Expression::Nested(f.to_owned(), Box::new(parse_mapping(m)?))
             }
             Yaml::Sequence(ref s) => {
                 // TODO: This block could probably be cleaned...
@@ -861,31 +931,73 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                 let mut contains: Vec<Identifier> = vec![];
                 let mut regex: Vec<Identifier> = vec![];
                 let mut rest: Vec<Expression> = vec![]; // NOTE: Don't care about speed of numbers atm
+
+                let mut cast = false;
+
                 for value in s {
                     let identifier = match value {
                         Yaml::Bool(b) => {
+                            if let Some(MiscSym::Int) = misc {
+                                rest.push(Expression::BooleanExpression(
+                                    Box::new(e.clone()),
+                                    BoolSym::Equal,
+                                    Box::new(Expression::Integer(if *b { 1 } else { 0 })),
+                                ))
+                            } else if let Some(MiscSym::Str) = misc {
+                                exact.push(Identifier {
+                                    ignore_case: false,
+                                    pattern: Pattern::Exact(b.to_string()),
+                                });
+                            } else {
+                                rest.push(Expression::BooleanExpression(
+                                    Box::new(e.clone()),
+                                    BoolSym::Equal,
+                                    Box::new(Expression::Boolean(*b)),
+                                ))
+                            }
+                            continue;
+                        }
+                        Yaml::Null => {
                             rest.push(Expression::BooleanExpression(
                                 Box::new(e.clone()),
                                 BoolSym::Equal,
-                                Box::new(Expression::Boolean(*b)),
+                                Box::new(Expression::Null),
                             ));
                             continue;
                         }
                         Yaml::Number(n) => {
                             if let Some(i) = n.as_i64() {
-                                rest.push(Expression::BooleanExpression(
-                                    Box::new(e.clone()),
-                                    BoolSym::Equal,
-                                    Box::new(Expression::Integer(i)),
-                                ));
+                                if let Some(MiscSym::Str) = misc {
+                                    exact.push(Identifier {
+                                        ignore_case: false,
+                                        pattern: Pattern::Exact(i.to_string()),
+                                    });
+                                } else {
+                                    rest.push(Expression::BooleanExpression(
+                                        Box::new(e.clone()),
+                                        BoolSym::Equal,
+                                        Box::new(Expression::Integer(i)),
+                                    ));
+                                }
                                 continue;
                             } else if let Some(i) = n.as_f64() {
-                                let expr = Expression::BooleanExpression(
-                                    Box::new(e.clone()),
-                                    BoolSym::Equal,
-                                    Box::new(Expression::Float(i)),
-                                );
-                                expressions.push(expr);
+                                if let Some(MiscSym::Int) = misc {
+                                    return Err(crate::error::parse_invalid_ident(format!(
+                                        "float cannot be cast into an integer, encountered - {:?}",
+                                        k
+                                    )));
+                                } else if let Some(MiscSym::Str) = misc {
+                                    exact.push(Identifier {
+                                        ignore_case: false,
+                                        pattern: Pattern::Exact(i.to_string()),
+                                    });
+                                } else {
+                                    rest.push(Expression::BooleanExpression(
+                                        Box::new(e.clone()),
+                                        BoolSym::Equal,
+                                        Box::new(Expression::Float(i)),
+                                    ))
+                                }
                                 continue;
                             }
                             return Err(crate::error::parse_invalid_ident(format!(
@@ -895,6 +1007,12 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         }
                         Yaml::String(s) => s.clone().into_identifier()?,
                         Yaml::Mapping(m) => {
+                            if misc.is_some() {
+                                return Err(crate::error::parse_invalid_ident(format!(
+                                    "nested mappings are not supported when casting or negating a field, encountered - {:?}",
+                                    k
+                                )));
+                            }
                             rest.push(Expression::Nested(
                                 f.to_owned(),
                                 Box::new(parse_mapping(m)?),
@@ -908,13 +1026,52 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                             )))
                         }
                     };
+                    if let Some(ref m) = misc {
+                        if let MiscSym::Str = m {
+                            cast = true;
+                        }
+                        match &identifier.pattern {
+                            Pattern::Any
+                            | Pattern::Regex(_)
+                            | Pattern::Contains(_)
+                            | Pattern::EndsWith(_)
+                            | Pattern::Exact(_)
+                            | Pattern::StartsWith(_) => {
+                                if let MiscSym::Int = m {
+                                    return Err(crate::error::parse_invalid_ident(format!(
+                                        "cannot cast string to integer, encountered - {:?}",
+                                        k
+                                    )));
+                                }
+                            }
+                            Pattern::Equal(_)
+                            | Pattern::GreaterThan(_)
+                            | Pattern::GreaterThanOrEqual(_)
+                            | Pattern::LessThan(_)
+                            | Pattern::LessThanOrEqual(_)
+                            | Pattern::FEqual(_)
+                            | Pattern::FGreaterThan(_)
+                            | Pattern::FGreaterThanOrEqual(_)
+                            | Pattern::FLessThan(_)
+                            | Pattern::FLessThanOrEqual(_) => {
+                                if let MiscSym::Str = m {
+                                    return Err(crate::error::parse_invalid_ident(format!(
+                                        "cannot cast integer to string, encountered - {:?}",
+                                        k
+                                    )));
+                                }
+                            }
+                        }
+                    }
                     match identifier.pattern {
                         Pattern::Exact(_) => exact.push(identifier),
                         Pattern::StartsWith(_) => starts_with.push(identifier),
                         Pattern::EndsWith(_) => ends_with.push(identifier),
                         Pattern::Contains(_) => contains.push(identifier),
                         Pattern::Regex(_) => regex.push(identifier),
-                        Pattern::Any => rest.push(Expression::Search(Search::Any, f.to_owned())),
+                        Pattern::Any => {
+                            rest.push(Expression::Search(Search::Any, f.to_owned(), cast))
+                        }
                         Pattern::Equal(i) => rest.push(Expression::BooleanExpression(
                             Box::new(e.clone()),
                             BoolSym::Equal,
@@ -1014,7 +1171,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         // NOTE: Do not allow empty string into the needles as it causes massive slow down,
                         // don't ask me why I have not looked into it!
                         if s.is_empty() {
-                            group.push(Expression::Search(Search::Exact(s), f.to_owned()));
+                            group.push(Expression::Search(Search::Exact(s), f.to_owned(), cast));
                         } else if i.ignore_case {
                             icontext.push(MatchType::Exact(s.clone()));
                             ineedles.push(s);
@@ -1041,7 +1198,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                             MatchType::Exact(c) => Search::Exact(c),
                             MatchType::StartsWith(c) => Search::StartsWith(c),
                         };
-                        group.push(Expression::Search(s, f.to_owned()));
+                        group.push(Expression::Search(s, f.to_owned(), cast));
                     } else {
                         group.push(Expression::Search(
                             Search::AhoCorasick(
@@ -1049,6 +1206,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                                 context,
                             ),
                             f.to_owned(),
+                            cast,
                         ));
                     }
                 }
@@ -1064,6 +1222,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                             icontext,
                         ),
                         f.to_owned(),
+                        cast,
                     ));
                 }
                 if !regex_set.is_empty() {
@@ -1073,6 +1232,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                                 regex_set.into_iter().next().expect("failed to get regex"),
                             ),
                             f.to_owned(),
+                            cast,
                         ));
                     } else {
                         group.push(Expression::Search(
@@ -1087,6 +1247,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                                 .expect("could not build regex set"),
                             ),
                             f.to_owned(),
+                            cast,
                         ));
                     }
                 }
@@ -1104,18 +1265,21 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                             .expect("could not build regex set"),
                         ),
                         f.to_owned(),
+                        cast,
                     ));
                 }
                 group.extend(rest);
                 if let Expression::Match(m, _) = e {
-                    expressions.push(Expression::Match(
-                        m,
-                        Box::new(Expression::BooleanGroup(BoolSym::Or, group)),
-                    ));
+                    Expression::Match(m, Box::new(Expression::BooleanGroup(BoolSym::Or, group)))
                 } else {
-                    expressions.push(Expression::BooleanGroup(BoolSym::Or, group));
+                    Expression::BooleanGroup(BoolSym::Or, group)
                 }
             }
+        };
+        if let Some(MiscSym::Not) = misc {
+            expressions.push(Expression::Negate(Box::new(expression)));
+        } else {
+            expressions.push(expression);
         }
     }
     if expressions.is_empty() {
@@ -1144,7 +1308,8 @@ mod tests {
                     BoolSym::Or,
                     vec![Expression::Search(
                         Search::Exact("bar".to_owned()),
-                        "foo".to_owned()
+                        "foo".to_owned(),
+                        false
                     )]
                 ))
             ),
@@ -1234,7 +1399,8 @@ mod tests {
                 "foo".to_owned(),
                 Box::new(Expression::Search(
                     Search::Exact("baz".to_owned()),
-                    "bar".to_owned()
+                    "bar".to_owned(),
+                    false
                 ))
             ),
             e
@@ -1335,7 +1501,8 @@ mod tests {
                 BoolSym::Or,
                 vec![Expression::Search(
                     Search::Exact("bar".to_owned()),
-                    "foo".to_owned()
+                    "foo".to_owned(),
+                    false
                 )]
             ),
             e

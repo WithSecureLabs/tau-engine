@@ -1,0 +1,13 @@
+detection:
+  A:
+    int(foo):
+      bar: 1
+  condition: A
+
+true_positives:
+  - foo: 
+      bar: "1"
+
+true_negatives:
+  - for:
+      bar: "0"

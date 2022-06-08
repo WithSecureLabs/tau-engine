@@ -12,4 +12,6 @@ macro_rules! invalid_rule {
     };
 }
 
+invalid_rule!("cast_int_nested");
+invalid_rule!("cast_str_nested");
 invalid_rule!("identifier_missing");

@@ -1,0 +1,12 @@
+detection:
+  A:
+    int(value): 1
+  condition: A
+
+true_positives:
+  - value: 1
+  - value: "1"
+
+true_negatives:
+  - value: 0
+  - value: "0"
