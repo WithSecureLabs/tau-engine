@@ -267,23 +267,41 @@ pub(crate) fn solve_expression(
                                         return SolverResult::Missing;
                                     }
                                 };
-                                // TODO: Don't cast to string first...
-                                match i.to_string() {
-                                    Some(v) => match v.parse::<i64>() {
+                                match i {
+                                    Value::Bool(x) => {
+                                        if x {
+                                            1
+                                        } else {
+                                            0
+                                        }
+                                    }
+                                    Value::Int(x) => x,
+                                    Value::String(x) => match x.parse::<i64>() {
                                         Ok(i) => i,
                                         Err(e) => {
                                             debug!(
-                                            "evaluating false, could not cast left hand side for {} - {}",
-                                            expression, e
-                                        );
+                                                "evaluating false, could not cast left hand side for {} - {}",
+                                                expression, e
+                                            );
                                             return SolverResult::False;
                                         }
                                     },
-                                    None => {
+                                    Value::UInt(x) => {
+                                        if x <= i64::MAX as u64 {
+                                            x as i64
+                                        } else {
+                                            debug!(
+                                                "evaluating false, could not cast left hand side for {} - {}",
+                                                expression, x
+                                            );
+                                            return SolverResult::False;
+                                        }
+                                    }
+                                    _ => {
                                         debug!(
-                                        "evaluating false, invalid type on left hand side for {}",
-                                        expression
-                                    );
+                                            "evaluating false, invalid type on left hand side for {}",
+                                            expression
+                                        );
                                         return SolverResult::False;
                                     }
                                 }
