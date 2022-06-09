@@ -15,3 +15,5 @@ macro_rules! invalid_rule {
 invalid_rule!("cast_int_nested");
 invalid_rule!("cast_str_nested");
 invalid_rule!("identifier_missing");
+invalid_rule!("match_all_invalid");
+invalid_rule!("match_of_invalid");

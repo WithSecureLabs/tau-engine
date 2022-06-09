@@ -53,6 +53,7 @@ impl fmt::Display for Search {
 impl PartialEq for Search {
     fn eq(&self, other: &Search) -> bool {
         match (self, other) {
+            (Search::Any, Search::Any) => true,
             (Search::AhoCorasick(_, m0), Search::AhoCorasick(_, m1)) => m0 == m1,
             (Search::Contains(s0), Search::Contains(s1)) => s0 == s1,
             (Search::EndsWith(s0), Search::EndsWith(s1)) => s0 == s1,
@@ -932,23 +933,36 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                 let mut regex: Vec<Identifier> = vec![];
                 let mut rest: Vec<Expression> = vec![]; // NOTE: Don't care about speed of numbers atm
 
+                let mut boolean = false;
                 let mut cast = false;
+                let mut mapping = false;
+                let mut number = false;
+                let mut string = false;
+
+                let unmatched_e = if let Expression::Match(_, e) = &e {
+                    *e.clone()
+                } else {
+                    e.clone()
+                };
 
                 for value in s {
                     let identifier = match value {
                         Yaml::Bool(b) => {
                             if let Some(MiscSym::Int) = misc {
+                                number = true;
                                 rest.push(Expression::BooleanExpression(
-                                    Box::new(e.clone()),
+                                    Box::new(unmatched_e.clone()),
                                     BoolSym::Equal,
                                     Box::new(Expression::Integer(if *b { 1 } else { 0 })),
                                 ))
                             } else if let Some(MiscSym::Str) = misc {
+                                string = true;
                                 exact.push(Identifier {
                                     ignore_case: false,
                                     pattern: Pattern::Exact(b.to_string()),
                                 });
                             } else {
+                                boolean = true;
                                 rest.push(Expression::BooleanExpression(
                                     Box::new(e.clone()),
                                     BoolSym::Equal,
@@ -959,7 +973,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         }
                         Yaml::Null => {
                             rest.push(Expression::BooleanExpression(
-                                Box::new(e.clone()),
+                                Box::new(unmatched_e.clone()),
                                 BoolSym::Equal,
                                 Box::new(Expression::Null),
                             ));
@@ -968,11 +982,13 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         Yaml::Number(n) => {
                             if let Some(i) = n.as_i64() {
                                 if let Some(MiscSym::Str) = misc {
+                                    string = true;
                                     exact.push(Identifier {
                                         ignore_case: false,
                                         pattern: Pattern::Exact(i.to_string()),
                                     });
                                 } else {
+                                    number = true;
                                     rest.push(Expression::BooleanExpression(
                                         Box::new(e.clone()),
                                         BoolSym::Equal,
@@ -987,11 +1003,13 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                                         k
                                     )));
                                 } else if let Some(MiscSym::Str) = misc {
+                                    string = true;
                                     exact.push(Identifier {
                                         ignore_case: false,
                                         pattern: Pattern::Exact(i.to_string()),
                                     });
                                 } else {
+                                    number = true;
                                     rest.push(Expression::BooleanExpression(
                                         Box::new(e.clone()),
                                         BoolSym::Equal,
@@ -1006,6 +1024,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                             )));
                         }
                         Yaml::String(s) => s.clone().into_identifier()?,
+
                         Yaml::Mapping(m) => {
                             if misc.is_some() {
                                 return Err(crate::error::parse_invalid_ident(format!(
@@ -1013,6 +1032,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                                     k
                                 )));
                             }
+                            mapping = true;
                             rest.push(Expression::Nested(
                                 f.to_owned(),
                                 Box::new(parse_mapping(m)?),
@@ -1064,68 +1084,113 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         }
                     }
                     match identifier.pattern {
-                        Pattern::Exact(_) => exact.push(identifier),
-                        Pattern::StartsWith(_) => starts_with.push(identifier),
-                        Pattern::EndsWith(_) => ends_with.push(identifier),
-                        Pattern::Contains(_) => contains.push(identifier),
-                        Pattern::Regex(_) => regex.push(identifier),
+                        Pattern::Exact(_) => {
+                            string = true;
+                            exact.push(identifier)
+                        }
+                        Pattern::StartsWith(_) => {
+                            string = true;
+                            starts_with.push(identifier)
+                        }
+                        Pattern::EndsWith(_) => {
+                            string = true;
+                            ends_with.push(identifier)
+                        }
+                        Pattern::Contains(_) => {
+                            string = true;
+                            contains.push(identifier)
+                        }
+                        Pattern::Regex(_) => {
+                            string = true;
+                            regex.push(identifier)
+                        }
                         Pattern::Any => {
+                            string = true;
                             rest.push(Expression::Search(Search::Any, f.to_owned(), cast))
                         }
-                        Pattern::Equal(i) => rest.push(Expression::BooleanExpression(
-                            Box::new(e.clone()),
-                            BoolSym::Equal,
-                            Box::new(Expression::Integer(i)),
-                        )),
-                        Pattern::GreaterThan(i) => rest.push(Expression::BooleanExpression(
-                            Box::new(e.clone()),
-                            BoolSym::GreaterThan,
-                            Box::new(Expression::Integer(i)),
-                        )),
-                        Pattern::GreaterThanOrEqual(i) => rest.push(Expression::BooleanExpression(
-                            Box::new(e.clone()),
-                            BoolSym::GreaterThanOrEqual,
-                            Box::new(Expression::Integer(i)),
-                        )),
-                        Pattern::LessThan(i) => rest.push(Expression::BooleanExpression(
-                            Box::new(e.clone()),
-                            BoolSym::LessThan,
-                            Box::new(Expression::Integer(i)),
-                        )),
-                        Pattern::LessThanOrEqual(i) => rest.push(Expression::BooleanExpression(
-                            Box::new(e.clone()),
-                            BoolSym::LessThanOrEqual,
-                            Box::new(Expression::Integer(i)),
-                        )),
-                        Pattern::FEqual(i) => rest.push(Expression::BooleanExpression(
-                            Box::new(e.clone()),
-                            BoolSym::Equal,
-                            Box::new(Expression::Float(i)),
-                        )),
-                        Pattern::FGreaterThan(i) => rest.push(Expression::BooleanExpression(
-                            Box::new(e.clone()),
-                            BoolSym::GreaterThan,
-                            Box::new(Expression::Float(i)),
-                        )),
+                        Pattern::Equal(i) => {
+                            number = true;
+                            rest.push(Expression::BooleanExpression(
+                                Box::new(e.clone()),
+                                BoolSym::Equal,
+                                Box::new(Expression::Integer(i)),
+                            ))
+                        }
+                        Pattern::GreaterThan(i) => {
+                            number = true;
+                            rest.push(Expression::BooleanExpression(
+                                Box::new(e.clone()),
+                                BoolSym::GreaterThan,
+                                Box::new(Expression::Integer(i)),
+                            ))
+                        }
+                        Pattern::GreaterThanOrEqual(i) => {
+                            number = true;
+                            rest.push(Expression::BooleanExpression(
+                                Box::new(e.clone()),
+                                BoolSym::GreaterThanOrEqual,
+                                Box::new(Expression::Integer(i)),
+                            ))
+                        }
+                        Pattern::LessThan(i) => {
+                            number = true;
+                            rest.push(Expression::BooleanExpression(
+                                Box::new(e.clone()),
+                                BoolSym::LessThan,
+                                Box::new(Expression::Integer(i)),
+                            ))
+                        }
+                        Pattern::LessThanOrEqual(i) => {
+                            number = true;
+                            rest.push(Expression::BooleanExpression(
+                                Box::new(e.clone()),
+                                BoolSym::LessThanOrEqual,
+                                Box::new(Expression::Integer(i)),
+                            ))
+                        }
+                        Pattern::FEqual(i) => {
+                            number = true;
+                            rest.push(Expression::BooleanExpression(
+                                Box::new(e.clone()),
+                                BoolSym::Equal,
+                                Box::new(Expression::Float(i)),
+                            ))
+                        }
+                        Pattern::FGreaterThan(i) => {
+                            number = true;
+                            rest.push(Expression::BooleanExpression(
+                                Box::new(e.clone()),
+                                BoolSym::GreaterThan,
+                                Box::new(Expression::Float(i)),
+                            ))
+                        }
                         Pattern::FGreaterThanOrEqual(i) => {
+                            number = true;
                             rest.push(Expression::BooleanExpression(
                                 Box::new(e.clone()),
                                 BoolSym::GreaterThanOrEqual,
                                 Box::new(Expression::Float(i)),
                             ))
                         }
-                        Pattern::FLessThan(i) => rest.push(Expression::BooleanExpression(
-                            Box::new(e.clone()),
-                            BoolSym::LessThan,
-                            Box::new(Expression::Float(i)),
-                        )),
-                        Pattern::FLessThanOrEqual(i) => rest.push(Expression::BooleanExpression(
-                            Box::new(e.clone()),
-                            BoolSym::LessThanOrEqual,
-                            Box::new(Expression::Float(i)),
-                        )),
+                        Pattern::FLessThan(i) => {
+                            number = true;
+                            rest.push(Expression::BooleanExpression(
+                                Box::new(e.clone()),
+                                BoolSym::LessThan,
+                                Box::new(Expression::Float(i)),
+                            ))
+                        }
+                        Pattern::FLessThanOrEqual(i) => {
+                            number = true;
+                            rest.push(Expression::BooleanExpression(
+                                Box::new(e.clone()),
+                                BoolSym::LessThanOrEqual,
+                                Box::new(Expression::Float(i)),
+                            ))
+                        }
                     }
                 }
+                let mut multiple = false;
                 let mut group: Vec<Expression> = vec![];
                 let mut context: Vec<MatchType> = vec![];
                 let mut needles: Vec<String> = vec![];
@@ -1200,6 +1265,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         };
                         group.push(Expression::Search(s, f.to_owned(), cast));
                     } else {
+                        multiple = true;
                         group.push(Expression::Search(
                             Search::AhoCorasick(
                                 Box::new(AhoCorasickBuilder::new().dfa(true).build(needles)),
@@ -1211,6 +1277,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                     }
                 }
                 if !ineedles.is_empty() {
+                    multiple = true;
                     group.push(Expression::Search(
                         Search::AhoCorasick(
                             Box::new(
@@ -1235,6 +1302,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                             cast,
                         ));
                     } else {
+                        multiple = true;
                         group.push(Expression::Search(
                             Search::RegexSet(
                                 RegexSetBuilder::new(
@@ -1252,6 +1320,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                     }
                 }
                 if !iregex_set.is_empty() {
+                    multiple = true;
                     group.push(Expression::Search(
                         Search::RegexSet(
                             RegexSetBuilder::new(
@@ -1269,7 +1338,100 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                     ));
                 }
                 group.extend(rest);
-                if let Expression::Match(m, _) = e {
+                if !group.is_empty() {
+                    // TODO: We only shake the big wins atm... There are futher gains to be had
+                    // here...
+                    let mut first: Option<&Expression> = None;
+                    let mut shake = true;
+                    for group in &group {
+                        match group {
+                            Expression::BooleanGroup(x, _) => {
+                                if let Some(f) = &first {
+                                    if let Expression::BooleanGroup(y, _) = f {
+                                        if x == y {
+                                            continue;
+                                        }
+                                    }
+                                    shake = false;
+                                    break;
+                                } else {
+                                    first = Some(group);
+                                }
+                            }
+                            Expression::Nested(x, _) => {
+                                if let Some(f) = &first {
+                                    if let Expression::Nested(y, _) = f {
+                                        if x == y {
+                                            continue;
+                                        }
+                                    }
+                                    shake = false;
+                                    break;
+                                } else {
+                                    first = Some(group);
+                                }
+                            }
+                            _ => {
+                                shake = false;
+                                break;
+                            }
+                        }
+                    }
+                    if shake {
+                        let expression: Expression = group
+                            .iter()
+                            .map(|e| e.clone())
+                            .next()
+                            .expect("could not get expression");
+                        let mut shaken = vec![];
+                        for group in group {
+                            match group {
+                                Expression::BooleanGroup(_, e) => shaken.extend(e),
+                                Expression::Nested(_, e) => shaken.push(*e),
+                                _ => panic!("expressions must all be the same type"),
+                            }
+                        }
+                        // TODO: We need to run this through sequence again, but that requires code
+                        // cleanup... This will then coalesce the string searches...
+                        let expression = match expression {
+                            Expression::BooleanGroup(s, _) => Expression::BooleanGroup(s, shaken),
+                            Expression::Nested(f, _) => Expression::Nested(
+                                f,
+                                Box::new(Expression::BooleanGroup(BoolSym::Or, shaken)),
+                            ),
+                            _ => panic!("expressions must all be the same type"),
+                        };
+                        group = vec![expression];
+                    }
+                }
+                if let Expression::Match(Match::All, _) | Expression::Match(Match::Of(_), _) = &e {
+                    if boolean as i32 + mapping as i32 + number as i32 + string as i32 > 1 {
+                        return Err(crate::error::parse_invalid_ident(
+                            "when using sequence modifiers the all expressions must be of the same type",
+                        ));
+                    }
+                }
+                if let Some(misc) = &misc {
+                    if let MiscSym::Int = misc {
+                        if boolean || mapping || string {
+                            return Err(crate::error::parse_invalid_ident(
+                                "when casting to int all expressions must be of type int",
+                            ));
+                        }
+                    }
+                    if let MiscSym::Str = &misc {
+                        if boolean || mapping || number {
+                            return Err(crate::error::parse_invalid_ident(
+                                "when casting to str all expressions must be of type str",
+                            ));
+                        }
+                    }
+                }
+                if group.is_empty() {
+                    return Err(crate::error::parse_invalid_ident("failed to parse mapping"));
+                } else if !multiple && group.len() == 1 {
+                    group.into_iter().next().expect("could not get expression")
+                } else if let Expression::Match(m, _) = e {
                     Expression::Match(m, Box::new(Expression::BooleanGroup(BoolSym::Or, group)))
                 } else {
                     Expression::BooleanGroup(BoolSym::Or, group)
@@ -1298,7 +1460,7 @@ mod tests {
 
     #[test]
     fn parse_bool_group_match_search() {
-        let identifier = r"all(foo): [bar]";
+        let identifier = r"all(foo): [bar, '*']";
         let yaml: Yaml = serde_yaml::from_str(identifier).unwrap();
         let e = super::parse_identifier(&yaml).unwrap();
         assert_eq!(
@@ -1306,13 +1468,27 @@ mod tests {
                 Match::All,
                 Box::new(Expression::BooleanGroup(
                     BoolSym::Or,
-                    vec![Expression::Search(
-                        Search::Exact("bar".to_owned()),
-                        "foo".to_owned(),
-                        false
-                    )]
+                    vec![
+                        Expression::Search(
+                            Search::Exact("bar".to_owned()),
+                            "foo".to_owned(),
+                            false
+                        ),
+                        Expression::Search(Search::Any, "foo".to_owned(), false)
+                    ]
                 ))
             ),
+            e
+        );
+    }
+
+    #[test]
+    fn parse_bool_group_match_search_shake() {
+        let identifier = r"all(foo): [bar]";
+        let yaml: Yaml = serde_yaml::from_str(identifier).unwrap();
+        let e = super::parse_identifier(&yaml).unwrap();
+        assert_eq!(
+            Expression::Search(Search::Exact("bar".to_owned()), "foo".to_string(), false),
             e
         );
     }

@@ -15,6 +15,10 @@ macro_rules! bench_rule {
             #[bench]
             fn [< bench_ $rule _true_positive >] (b: &mut Bencher) {
                 let rule = common::load_rule("benches", $rule);
+                println!("{}", rule.detection.expression);
+                for (k, v) in &rule.detection.identifiers {
+                    println!("{}: {}", k, v);
+                }
                 assert_eq!(rule.validate().unwrap(), true);
 
                 let document = rule.true_positives[0].as_mapping().unwrap();
