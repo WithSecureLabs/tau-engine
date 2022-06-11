@@ -19,6 +19,14 @@ pub enum MatchType {
     StartsWith(String),
 }
 
+impl MatchType {
+    pub fn value(&self) -> &String {
+        match self {
+            Self::Contains(s) | Self::EndsWith(s) | Self::Exact(s) | Self::StartsWith(s) => s,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Match {
     All,
@@ -27,25 +35,32 @@ pub enum Match {
 
 #[derive(Clone, Debug)]
 pub enum Search {
-    AhoCorasick(Box<AhoCorasick>, Vec<MatchType>),
+    AhoCorasick(Box<AhoCorasick>, Vec<MatchType>, bool),
     Any,
     Contains(String),
     EndsWith(String),
     Exact(String),
-    Regex(Regex),
-    RegexSet(RegexSet),
+    Regex(Regex, bool),
+    RegexSet(RegexSet, bool),
     StartsWith(String),
 }
 impl fmt::Display for Search {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::AhoCorasick(_, t) => write!(f, "aho_corasick({:?})", t),
+            Self::AhoCorasick(_, t, i) => {
+                write!(f, "{}aho_corasick({:?})", if *i { "i" } else { "" }, t)
+            }
             Self::Any => write!(f, "any"),
             Self::Contains(s) => write!(f, "contains({})", s),
             Self::EndsWith(s) => write!(f, "ends_with({})", s),
             Self::Exact(s) => write!(f, "exact({})", s),
-            Self::Regex(s) => write!(f, "regex({})", s),
-            Self::RegexSet(s) => write!(f, "regex_set({:?})", s.patterns()),
+            Self::Regex(s, i) => write!(f, "{}regex({})", if *i { "i" } else { "" }, s),
+            Self::RegexSet(s, i) => write!(
+                f,
+                "{}regex_set({:?})",
+                if *i { "i" } else { "" },
+                s.patterns()
+            ),
             Self::StartsWith(s) => write!(f, "starts_with({})", s),
         }
     }
@@ -54,12 +69,16 @@ impl PartialEq for Search {
     fn eq(&self, other: &Search) -> bool {
         match (self, other) {
             (Search::Any, Search::Any) => true,
-            (Search::AhoCorasick(_, m0), Search::AhoCorasick(_, m1)) => m0 == m1,
+            (Search::AhoCorasick(_, m0, _), Search::AhoCorasick(_, m1, _)) => m0 == m1,
             (Search::Contains(s0), Search::Contains(s1)) => s0 == s1,
             (Search::EndsWith(s0), Search::EndsWith(s1)) => s0 == s1,
             (Search::Exact(s0), Search::Exact(s1)) => s0 == s1,
-            (Search::Regex(r0), Search::Regex(r1)) => r0.as_str() == r1.as_str(),
-            (Search::RegexSet(r0), Search::RegexSet(r1)) => r0.patterns() == r1.patterns(),
+            (Search::Regex(r0, i0), Search::Regex(r1, i1)) => {
+                r0.as_str() == r1.as_str() && i0 == i1
+            }
+            (Search::RegexSet(r0, i0), Search::RegexSet(r1, i1)) => {
+                r0.patterns() == r1.patterns() && i0 == i1
+            }
             (Search::StartsWith(s0), Search::StartsWith(s1)) => s0 == s1,
             (_, _) => false,
         }
@@ -831,7 +850,11 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         Box::new(Expression::Float(i)),
                     ),
                     Pattern::Any => Expression::Search(Search::Any, f.to_owned(), cast),
-                    Pattern::Regex(c) => Expression::Search(Search::Regex(c), f.to_owned(), cast),
+                    Pattern::Regex(c) => Expression::Search(
+                        Search::Regex(c, identifier.ignore_case),
+                        f.to_owned(),
+                        cast,
+                    ),
                     Pattern::Contains(c) => Expression::Search(
                         if identifier.ignore_case {
                             Search::AhoCorasick(
@@ -842,6 +865,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                                         .build(vec![c.clone()]),
                                 ),
                                 vec![MatchType::Contains(c)],
+                                true,
                             )
                         } else {
                             Search::Contains(c)
@@ -859,6 +883,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                                         .build(vec![c.clone()]),
                                 ),
                                 vec![MatchType::EndsWith(c)],
+                                true,
                             )
                         } else {
                             Search::EndsWith(c)
@@ -876,6 +901,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                                         .build(vec![c.clone()]),
                                 ),
                                 vec![MatchType::Exact(c)],
+                                true,
                             )
                         } else {
                             Search::Exact(c)
@@ -893,6 +919,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                                         .build(vec![c.clone()]),
                                 ),
                                 vec![MatchType::StartsWith(c)],
+                                true,
                             )
                         } else {
                             Search::StartsWith(c)
@@ -1033,6 +1060,8 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                                 )));
                             }
                             mapping = true;
+                            // FIXME: We should be nesting at the end of the squence, currently we
+                            // have to shake to remove this...
                             rest.push(Expression::Nested(
                                 f.to_owned(),
                                 Box::new(parse_mapping(m)?),
@@ -1270,6 +1299,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                             Search::AhoCorasick(
                                 Box::new(AhoCorasickBuilder::new().dfa(true).build(needles)),
                                 context,
+                                true,
                             ),
                             f.to_owned(),
                             cast,
@@ -1287,6 +1317,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                                     .build(ineedles),
                             ),
                             icontext,
+                            true,
                         ),
                         f.to_owned(),
                         cast,
@@ -1297,6 +1328,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         group.push(Expression::Search(
                             Search::Regex(
                                 regex_set.into_iter().next().expect("failed to get regex"),
+                                false,
                             ),
                             f.to_owned(),
                             cast,
@@ -1313,6 +1345,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                                 )
                                 .build()
                                 .expect("could not build regex set"),
+                                false,
                             ),
                             f.to_owned(),
                             cast,
@@ -1320,90 +1353,36 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                     }
                 }
                 if !iregex_set.is_empty() {
-                    multiple = true;
-                    group.push(Expression::Search(
-                        Search::RegexSet(
-                            RegexSetBuilder::new(
-                                iregex_set
-                                    .into_iter()
-                                    .map(|r| r.as_str().to_string())
-                                    .collect::<Vec<_>>(),
-                            )
-                            .case_insensitive(true)
-                            .build()
-                            .expect("could not build regex set"),
-                        ),
-                        f.to_owned(),
-                        cast,
-                    ));
+                    if iregex_set.len() == 1 {
+                        group.push(Expression::Search(
+                            Search::Regex(
+                                iregex_set.into_iter().next().expect("failed to get regex"),
+                                true,
+                            ),
+                            f.to_owned(),
+                            cast,
+                        ));
+                    } else {
+                        multiple = true;
+                        group.push(Expression::Search(
+                            Search::RegexSet(
+                                RegexSetBuilder::new(
+                                    iregex_set
+                                        .into_iter()
+                                        .map(|r| r.as_str().to_string())
+                                        .collect::<Vec<_>>(),
+                                )
+                                .case_insensitive(true)
+                                .build()
+                                .expect("could not build regex set"),
+                                true,
+                            ),
+                            f.to_owned(),
+                            cast,
+                        ));
+                    }
                 }
                 group.extend(rest);
-                if !group.is_empty() {
-                    // TODO: We only shake the big wins atm... There are futher gains to be had
-                    // here...
-                    let mut first: Option<&Expression> = None;
-                    let mut shake = true;
-                    for group in &group {
-                        match group {
-                            Expression::BooleanGroup(x, _) => {
-                                if let Some(f) = &first {
-                                    if let Expression::BooleanGroup(y, _) = f {
-                                        if x == y {
-                                            continue;
-                                        }
-                                    }
-                                    shake = false;
-                                    break;
-                                } else {
-                                    first = Some(group);
-                                }
-                            }
-                            Expression::Nested(x, _) => {
-                                if let Some(f) = &first {
-                                    if let Expression::Nested(y, _) = f {
-                                        if x == y {
-                                            continue;
-                                        }
-                                    }
-                                    shake = false;
-                                    break;
-                                } else {
-                                    first = Some(group);
-                                }
-                            }
-                            _ => {
-                                shake = false;
-                                break;
-                            }
-                        }
-                    }
-                    if shake {
-                        let expression: Expression = group
-                            .iter()
-                            .map(|e| e.clone())
-                            .next()
-                            .expect("could not get expression");
-                        let mut shaken = vec![];
-                        for group in group {
-                            match group {
-                                Expression::BooleanGroup(_, e) => shaken.extend(e),
-                                Expression::Nested(_, e) => shaken.push(*e),
-                                _ => panic!("expressions must all be the same type"),
-                            }
-                        }
-                        // TODO: We need to run this through sequence again, but that requires code
-                        // cleanup... This will then coalesce the string searches...
-                        let expression = match expression {
-                            Expression::BooleanGroup(s, _) => Expression::BooleanGroup(s, shaken),
-                            Expression::Nested(f, _) => Expression::Nested(
-                                f,
-                                Box::new(Expression::BooleanGroup(BoolSym::Or, shaken)),
-                            ),
-                            _ => panic!("expressions must all be the same type"),
-                        };
-                        group = vec![expression];
-                    }
-                }
                 if let Expression::Match(Match::All, _) | Expression::Match(Match::Of(_), _) = &e {
                     if boolean as i32 + mapping as i32 + number as i32 + string as i32 > 1 {
                         return Err(crate::error::parse_invalid_ident(

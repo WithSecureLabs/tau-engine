@@ -8,6 +8,12 @@ macro_rules! solve_rule {
                 let rule = common::load_rule($rule).expect("invalid rule");
                 assert_eq!(rule.validate().unwrap(), true);
             }
+
+            #[test]
+            fn [< solve_ $rule _shaken >] () {
+                let rule = common::load_shaken_rule($rule).expect("invalid rule");
+                assert_eq!(rule.validate().unwrap(), true);
+            }
         }
     };
 }

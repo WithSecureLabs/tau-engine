@@ -107,7 +107,7 @@
 //! "#;
 //!
 //! // Load and validate a rule.
-//! let rule = Rule::load(rule).unwrap();
+//! let rule = Rule::from_str(rule).unwrap();
 //! assert_eq!(rule.validate().unwrap(), true);
 //!
 //! // Create a document.
@@ -151,7 +151,7 @@
 //! "#;
 //!
 //! // Load and validate a rule.
-//! let rule = Rule::load(rule).unwrap();
+//! let rule = Rule::from_str(rule).unwrap();
 //! assert_eq!(rule.validate().unwrap(), true);
 //!
 //! // Create a document.
@@ -184,6 +184,7 @@ mod identifier;
 mod json;
 mod parser;
 mod rule;
+mod shaker;
 mod solver;
 mod tokeniser;
 mod value;
@@ -196,6 +197,7 @@ pub mod core {
     pub mod parser {
         pub use crate::identifier::*;
         pub use crate::parser::*;
+        pub use crate::shaker::*;
         pub use crate::tokeniser::*;
     }
     pub use crate::rule::Detection;

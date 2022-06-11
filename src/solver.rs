@@ -454,7 +454,7 @@ pub(crate) fn solve_expression(
             };
             for expression in group {
                 // NOTE: Because of needle optimisation we have to handle aho in a `slow` fashion here...
-                if let Expression::Search(Search::AhoCorasick(a, m), i, c) = expression {
+                if let Expression::Search(Search::AhoCorasick(a, m, _), i, c) = expression {
                     let value = match document.find(i) {
                         Some(v) => v,
                         None => {
@@ -526,7 +526,7 @@ pub(crate) fn solve_expression(
                             return SolverResult::Missing;
                         }
                     }
-                } else if let Expression::Search(Search::RegexSet(s), i, c) = expression {
+                } else if let Expression::Search(Search::RegexSet(s, _), i, c) = expression {
                     let value = match document.find(i) {
                         Some(v) => v,
                         None => {
@@ -652,7 +652,7 @@ pub(crate) fn solve_expression(
             let mut res = SolverResult::Missing;
             for expression in group {
                 // NOTE: Because of needle optimisation we have to handle aho in a `slow` fashion here...
-                if let Expression::Search(Search::AhoCorasick(a, m), i, cast) = expression {
+                if let Expression::Search(Search::AhoCorasick(a, m, _), i, cast) = expression {
                     let value = match document.find(i) {
                         Some(v) => v,
                         None => {
@@ -731,7 +731,7 @@ pub(crate) fn solve_expression(
                             return SolverResult::Missing;
                         }
                     }
-                } else if let Expression::Search(Search::RegexSet(s), i, cast) = expression {
+                } else if let Expression::Search(Search::RegexSet(s, _), i, cast) = expression {
                     let value = match document.find(i) {
                         Some(v) => v,
                         None => {
@@ -976,17 +976,17 @@ fn search(kind: &Search, value: &str) -> SolverResult {
                 return SolverResult::True;
             }
         }
-        Search::Regex(ref i) => {
+        Search::Regex(ref i, _) => {
             if i.is_match(value) {
                 return SolverResult::True;
             }
         }
-        Search::RegexSet(ref i) => {
+        Search::RegexSet(ref i, _) => {
             if i.is_match(value) {
                 return SolverResult::True;
             }
         }
-        Search::AhoCorasick(ref a, ref m) => {
+        Search::AhoCorasick(ref a, ref m, _) => {
             for i in a.find_overlapping_iter(value) {
                 match m[i.pattern()] {
                     MatchType::Contains(_) => return SolverResult::True,
