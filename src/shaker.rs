@@ -251,8 +251,66 @@ pub fn shake(expression: Expression) -> Expression {
             }
         }
         Expression::BooleanExpression(left, symbol, right) => {
-            // TODO: We could flatten multiple expressions into groups...
-            Expression::BooleanExpression(Box::new(shake(*left)), symbol, Box::new(shake(*right)))
+            let left = shake(*left);
+            let right = shake(*right);
+            match (left, symbol, right) {
+                (
+                    Expression::BooleanGroup(BoolSym::And, mut left),
+                    BoolSym::And,
+                    Expression::BooleanGroup(BoolSym::And, right),
+                ) => {
+                    left.extend(right);
+                    shake(Expression::BooleanGroup(BoolSym::And, left))
+                }
+                (Expression::BooleanGroup(BoolSym::And, mut left), BoolSym::And, right) => {
+                    left.push(right);
+                    shake(Expression::BooleanGroup(BoolSym::And, left))
+                }
+                (left, BoolSym::And, Expression::BooleanGroup(BoolSym::And, right)) => {
+                    let mut left = vec![left];
+                    left.extend(right);
+                    shake(Expression::BooleanGroup(BoolSym::And, left))
+                }
+                (
+                    Expression::BooleanGroup(BoolSym::Or, mut left),
+                    BoolSym::Or,
+                    Expression::BooleanGroup(BoolSym::Or, right),
+                ) => {
+                    left.extend(right);
+                    shake(Expression::BooleanGroup(BoolSym::Or, left))
+                }
+                (Expression::BooleanGroup(BoolSym::Or, mut left), BoolSym::Or, right) => {
+                    left.push(right);
+                    shake(Expression::BooleanGroup(BoolSym::Or, left))
+                }
+                (left, BoolSym::Or, Expression::BooleanGroup(BoolSym::Or, right)) => {
+                    let mut left = vec![left];
+                    left.extend(right);
+                    shake(Expression::BooleanGroup(BoolSym::Or, left))
+                }
+                (Expression::BooleanExpression(x, BoolSym::And, y), BoolSym::And, z) => {
+                    shake(Expression::BooleanGroup(BoolSym::And, vec![*x, *y, z]))
+                }
+                (x, BoolSym::And, Expression::BooleanExpression(y, BoolSym::And, z)) => {
+                    shake(Expression::BooleanGroup(BoolSym::And, vec![x, *y, *z]))
+                }
+                (Expression::BooleanExpression(x, BoolSym::Or, y), BoolSym::Or, z) => {
+                    shake(Expression::BooleanGroup(BoolSym::Or, vec![*x, *y, z]))
+                }
+                (x, BoolSym::Or, Expression::BooleanExpression(y, BoolSym::Or, z)) => {
+                    shake(Expression::BooleanGroup(BoolSym::Or, vec![x, *y, *z]))
+                }
+                (Expression::Negate(left), BoolSym::And, Expression::Negate(right)) => {
+                    shake(Expression::Negate(Box::new(Expression::BooleanExpression(
+                        left,
+                        BoolSym::Or,
+                        right,
+                    ))))
+                }
+                (left, _, right) => {
+                    Expression::BooleanExpression(Box::new(left), symbol, Box::new(right))
+                }
+            }
         }
         Expression::Match(Match::All, expression) => {
             // NOTE: We have to be careful what we optimise here as we could really break the
@@ -265,9 +323,11 @@ pub fn shake(expression: Expression) -> Expression {
             }
         }
         Expression::Negate(expression) => match *expression {
-            Expression::BooleanGroup(BoolSym::Or, _) => Expression::Match(Match::Of(0), expression),
-            Expression::Negate(inner) => *inner,
-            _ => Expression::Negate(expression),
+            Expression::BooleanGroup(BoolSym::Or, _) => {
+                shake(Expression::Match(Match::Of(0), expression))
+            }
+            Expression::Negate(inner) => shake(*inner),
+            _ => Expression::Negate(Box::new(shake(*expression))),
         },
         Expression::Nested(field, expression) => {
             Expression::Nested(field, Box::new(shake(*expression)))
