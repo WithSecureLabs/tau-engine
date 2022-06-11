@@ -11,7 +11,7 @@ use crate::document::Document;
 use crate::parser::{self, Expression};
 use crate::shaker;
 use crate::solver;
-use crate::tokeniser::{MiscSym, Token, Tokeniser};
+use crate::tokeniser::{ModSym, Token, Tokeniser};
 
 /// The detection block, this contains the logic that is to be run through the solver to evaluate a
 /// `Document`.
@@ -104,13 +104,12 @@ impl<'de> Deserialize<'de> for Detection {
                 let mut i = 0;
                 for token in &tokens {
                     if i > 1 {
-                        if let Token::Miscellaneous(m) = &tokens[i - 2] {
+                        if let Token::Modifier(m) = &tokens[i - 2] {
                             match m {
-                                MiscSym::Int | MiscSym::Str => {
+                                ModSym::Int | ModSym::Not | ModSym::Str => {
                                     i += 1;
                                     continue;
                                 }
-                                _ => {}
                             }
                         }
                     }
@@ -134,6 +133,12 @@ impl<'de> Deserialize<'de> for Detection {
                         )));
                     }
                 };
+                if !expression.is_solvable() {
+                    return Err(de::Error::custom(format_args!(
+                        "invalid value: condition, not solveable - {}",
+                        expression
+                    )));
+                }
                 Ok(Detection {
                     expression,
                     identifiers,

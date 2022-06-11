@@ -47,9 +47,9 @@ pub enum DelSym {
     RightParenthesis,
 }
 
-/// Miscellaneous Symbols.
+/// Modifier Symbols.
 #[derive(Clone, Debug, PartialEq)]
-pub enum MiscSym {
+pub enum ModSym {
     /// `int`
     Int,
     /// `not`
@@ -57,12 +57,25 @@ pub enum MiscSym {
     /// `str`
     Str,
 }
-impl fmt::Display for MiscSym {
+impl fmt::Display for ModSym {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Int => write!(f, "int"),
             Self::Not => write!(f, "not"),
             Self::Str => write!(f, "str"),
+        }
+    }
+}
+/// Miscellaneous Symbols.
+#[derive(Clone, Debug, PartialEq)]
+pub enum MiscSym {
+    /// `not`
+    Not,
+}
+impl fmt::Display for MiscSym {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Not => write!(f, "not"),
         }
     }
 }
@@ -84,6 +97,7 @@ pub enum Token {
     Identifier(String),
     Integer(i64),
     Operator(BoolSym),
+    Modifier(ModSym),
     Miscellaneous(MiscSym),
     Match(MatchSym),
 }
@@ -102,7 +116,9 @@ impl Token {
             },
             Token::Miscellaneous(ref m) => match *m {
                 MiscSym::Not => 95,
-                MiscSym::Int | MiscSym::Str => 60,
+            },
+            Token::Modifier(ref m) => match *m {
+                ModSym::Int | ModSym::Not | ModSym::Str => 60,
             },
             Token::Match(ref s) => match *s {
                 MatchSym::All | MatchSym::Of => 60,
@@ -157,14 +173,14 @@ impl Tokeniser for String {
                 }
                 'a'..='z' | 'A'..='Z' | '#' => {
                     if match_ahead(&mut it, "int(") {
-                        tokens.push(Token::Miscellaneous(MiscSym::Int));
+                        tokens.push(Token::Modifier(ModSym::Int));
                         it.nth(2);
                     } else if match_ahead(&mut it, "string(") {
                         // NOTE: Deprecated
-                        tokens.push(Token::Miscellaneous(MiscSym::Str));
+                        tokens.push(Token::Modifier(ModSym::Str));
                         it.nth(5);
                     } else if match_ahead(&mut it, "str(") {
-                        tokens.push(Token::Miscellaneous(MiscSym::Str));
+                        tokens.push(Token::Modifier(ModSym::Str));
                         it.nth(2);
                     } else if match_ahead(&mut it, "and ") {
                         tokens.push(Token::Operator(BoolSym::And));
@@ -174,6 +190,9 @@ impl Tokeniser for String {
                         it.nth(1);
                     } else if match_ahead(&mut it, "not ") {
                         tokens.push(Token::Miscellaneous(MiscSym::Not));
+                        it.nth(2);
+                    } else if match_ahead(&mut it, "not(") {
+                        tokens.push(Token::Modifier(ModSym::Not));
                         it.nth(2);
                     } else if match_ahead(&mut it, "all(") {
                         tokens.push(Token::Match(MatchSym::All));
@@ -390,20 +409,6 @@ mod tests {
     }
 
     #[test]
-    fn tokeniser_misc_int() {
-        let t = String::from("int(a)").tokenise().unwrap();
-        assert_eq!(
-            vec![
-                Token::Miscellaneous(MiscSym::Int),
-                Token::Delimiter(DelSym::LeftParenthesis),
-                Token::Identifier("a".to_string()),
-                Token::Delimiter(DelSym::RightParenthesis),
-            ],
-            t
-        );
-    }
-
-    #[test]
     fn tokeniser_misc_not() {
         let t = String::from("not a").tokenise().unwrap();
         assert_eq!(
@@ -416,11 +421,39 @@ mod tests {
     }
 
     #[test]
-    fn tokeniser_misc_str() {
+    fn tokeniser_mod_int() {
+        let t = String::from("int(a)").tokenise().unwrap();
+        assert_eq!(
+            vec![
+                Token::Modifier(ModSym::Int),
+                Token::Delimiter(DelSym::LeftParenthesis),
+                Token::Identifier("a".to_string()),
+                Token::Delimiter(DelSym::RightParenthesis),
+            ],
+            t
+        );
+    }
+
+    #[test]
+    fn tokeniser_mod_not() {
+        let t = String::from("not(a)").tokenise().unwrap();
+        assert_eq!(
+            vec![
+                Token::Modifier(ModSym::Not),
+                Token::Delimiter(DelSym::LeftParenthesis),
+                Token::Identifier("a".to_string()),
+                Token::Delimiter(DelSym::RightParenthesis),
+            ],
+            t
+        );
+    }
+
+    #[test]
+    fn tokeniser_mod_str() {
         let t = String::from("str(a)").tokenise().unwrap();
         assert_eq!(
             vec![
-                Token::Miscellaneous(MiscSym::Str),
+                Token::Modifier(ModSym::Str),
                 Token::Delimiter(DelSym::LeftParenthesis),
                 Token::Identifier("a".to_string()),
                 Token::Delimiter(DelSym::RightParenthesis),

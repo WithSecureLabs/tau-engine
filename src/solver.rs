@@ -7,7 +7,7 @@ use tracing::debug;
 use crate::document::Document;
 use crate::parser::{Expression, Match, MatchType, Search};
 use crate::rule::Detection;
-use crate::tokeniser::{BoolSym, MiscSym};
+use crate::tokeniser::{BoolSym, ModSym};
 use crate::value::Value;
 
 #[derive(Debug, PartialEq)]
@@ -65,9 +65,9 @@ pub(crate) fn solve_expression(
             // Edge cases
             match (&**left, op, &**right) {
                 (
-                    Expression::Cast(ref left, MiscSym::Str),
+                    Expression::Cast(ref left, ModSym::Str),
                     BoolSym::Equal,
-                    Expression::Cast(ref right, MiscSym::Str),
+                    Expression::Cast(ref right, ModSym::Str),
                 ) => {
                     let x = match document.find(left) {
                         Some(x) => x,
@@ -256,7 +256,7 @@ pub(crate) fn solve_expression(
                                     }
                                 }
                             }
-                            Expression::Cast(field, MiscSym::Int) => {
+                            Expression::Cast(field, ModSym::Int) => {
                                 let i = match document.find(field) {
                                     Some(i) => i,
                                     None => {
@@ -335,7 +335,7 @@ pub(crate) fn solve_expression(
                                     }
                                 }
                             }
-                            Expression::Cast(field, MiscSym::Int) => {
+                            Expression::Cast(field, ModSym::Int) => {
                                 let i = match document.find(field) {
                                     Some(i) => i,
                                     None => {
@@ -651,8 +651,17 @@ pub(crate) fn solve_expression(
             let mut count = 0;
             let mut res = SolverResult::Missing;
             for expression in group {
+                if c == 0 {
+                    match solve_expression(expression, identifiers, document) {
+                        SolverResult::True => return SolverResult::False,
+                        SolverResult::False => {
+                            res = SolverResult::True;
+                        }
+                        SolverResult::Missing => {}
+                    }
                 // NOTE: Because of needle optimisation we have to handle aho in a `slow` fashion here...
-                if let Expression::Search(Search::AhoCorasick(a, m, _), i, cast) = expression {
+                } else if let Expression::Search(Search::AhoCorasick(a, m, _), i, cast) = expression
+                {
                     let value = match document.find(i) {
                         Some(v) => v,
                         None => {
@@ -663,9 +672,7 @@ pub(crate) fn solve_expression(
                     match (value, cast) {
                         (Value::String(ref x), _) => {
                             count += slow_aho(a, m, x);
-                            if c == 0 && count > 0 {
-                                return SolverResult::False;
-                            } else if count >= c {
+                            if count >= c {
                                 return SolverResult::True;
                             }
                         }
@@ -674,9 +681,7 @@ pub(crate) fn solve_expression(
                             for v in x.iter() {
                                 if let Some(x) = v.as_str() {
                                     let hits = slow_aho(a, m, x);
-                                    if c == 0 && hits > 0 {
-                                        return SolverResult::False;
-                                    } else if count + hits >= c {
+                                    if count + hits >= c {
                                         return SolverResult::True;
                                     } else if hits > max {
                                         max = hits;
@@ -690,9 +695,7 @@ pub(crate) fn solve_expression(
                                         _ => continue,
                                     };
                                     let hits = slow_aho(a, m, x.as_str());
-                                    if c == 0 && hits > 0 {
-                                        return SolverResult::False;
-                                    } else if count + hits >= c {
+                                    if count + hits >= c {
                                         return SolverResult::True;
                                     } else if hits > max {
                                         max = hits;
@@ -704,36 +707,28 @@ pub(crate) fn solve_expression(
                         (Value::Bool(x), true) => {
                             let x = x.to_string();
                             count += slow_aho(a, m, x.as_str());
-                            if c == 0 && count > 0 {
-                                return SolverResult::False;
-                            } else if count >= c {
+                            if count >= c {
                                 return SolverResult::True;
                             }
                         }
                         (Value::Float(x), true) => {
                             let x = x.to_string();
                             count += slow_aho(a, m, x.as_str());
-                            if c == 0 && count > 0 {
-                                return SolverResult::False;
-                            } else if count >= c {
+                            if count >= c {
                                 return SolverResult::True;
                             }
                         }
                         (Value::Int(x), true) => {
                             let x = x.to_string();
                             count += slow_aho(a, m, x.as_str());
-                            if c == 0 && count > 0 {
-                                return SolverResult::False;
-                            } else if count >= c {
+                            if count >= c {
                                 return SolverResult::True;
                             }
                         }
                         (Value::UInt(x), true) => {
                             let x = x.to_string();
                             count += slow_aho(a, m, x.as_str());
-                            if c == 0 && count > 0 {
-                                return SolverResult::False;
-                            } else if count >= c {
+                            if count >= c {
                                 return SolverResult::True;
                             }
                         }
@@ -758,9 +753,7 @@ pub(crate) fn solve_expression(
                             for _ in s.matches(x).iter() {
                                 count += 1;
                             }
-                            if c == 0 && count > 0 {
-                                return SolverResult::False;
-                            } else if count >= c {
+                            if count >= c {
                                 return SolverResult::True;
                             }
                         }
@@ -772,9 +765,7 @@ pub(crate) fn solve_expression(
                                     for _ in s.matches(x).iter() {
                                         hits += 1;
                                     }
-                                    if c == 0 && hits > 0 {
-                                        return SolverResult::False;
-                                    } else if count + hits >= c {
+                                    if count + hits >= c {
                                         return SolverResult::True;
                                     } else if hits > max {
                                         max = hits;
@@ -791,9 +782,7 @@ pub(crate) fn solve_expression(
                                     for _ in s.matches(x.as_str()).iter() {
                                         hits += 1;
                                     }
-                                    if c == 0 && hits > 0 {
-                                        return SolverResult::False;
-                                    } else if count + hits >= c {
+                                    if count + hits >= c {
                                         return SolverResult::True;
                                     } else if hits > max {
                                         max = hits;
@@ -807,9 +796,7 @@ pub(crate) fn solve_expression(
                             for _ in s.matches(x.as_str()).iter() {
                                 count += 1;
                             }
-                            if c == 0 && count > 0 {
-                                return SolverResult::False;
-                            } else if count >= c {
+                            if count >= c {
                                 return SolverResult::True;
                             }
                         }
@@ -818,9 +805,7 @@ pub(crate) fn solve_expression(
                             for _ in s.matches(x.as_str()).iter() {
                                 count += 1;
                             }
-                            if c == 0 && count > 0 {
-                                return SolverResult::False;
-                            } else if count >= c {
+                            if count >= c {
                                 return SolverResult::True;
                             }
                         }
@@ -829,9 +814,7 @@ pub(crate) fn solve_expression(
                             for _ in s.matches(x.as_str()).iter() {
                                 count += 1;
                             }
-                            if c == 0 && count > 0 {
-                                return SolverResult::False;
-                            } else if count >= c {
+                            if count >= c {
                                 return SolverResult::True;
                             }
                         }
@@ -840,9 +823,7 @@ pub(crate) fn solve_expression(
                             for _ in s.matches(x.as_str()).iter() {
                                 count += 1;
                             }
-                            if c == 0 && count > 0 {
-                                return SolverResult::False;
-                            } else if count >= c {
+                            if count >= c {
                                 return SolverResult::True;
                             }
                         }
@@ -853,9 +834,6 @@ pub(crate) fn solve_expression(
                             );
                             return SolverResult::Missing;
                         }
-                    }
-                    if c == 0 {
-                        return SolverResult::True;
                     }
                 } else {
                     match solve_expression(expression, identifiers, document) {

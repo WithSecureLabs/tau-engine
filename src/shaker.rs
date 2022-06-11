@@ -265,6 +265,7 @@ pub fn shake(expression: Expression) -> Expression {
             }
         }
         Expression::Negate(expression) => match *expression {
+            Expression::BooleanGroup(BoolSym::Or, _) => Expression::Match(Match::Of(0), expression),
             Expression::Negate(inner) => *inner,
             _ => Expression::Negate(expression),
         },

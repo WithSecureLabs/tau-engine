@@ -8,6 +8,24 @@ mod common;
 #[cfg(feature = "benchmarks")]
 use test::Bencher;
 
+fn print_rule(rule: &tau_engine::Rule) {
+    println!("condition: {}", rule.detection.expression);
+    let mut keys = rule
+        .detection
+        .identifiers
+        .keys()
+        .cloned()
+        .collect::<Vec<_>>();
+    keys.sort();
+    for key in &keys {
+        println!(
+            "\t{}: {}",
+            key,
+            rule.detection.identifiers.get(key).unwrap()
+        );
+    }
+}
+
 macro_rules! bench_rule {
     ($rule:expr) => {
         paste::item! {
@@ -16,6 +34,8 @@ macro_rules! bench_rule {
             fn [< bench_ $rule _true_positive >] (b: &mut Bencher) {
                 let rule = common::load_rule("benches", $rule);
                 assert_eq!(rule.validate().unwrap(), true);
+
+                print_rule(&rule);
 
                 let document = rule.true_positives[0].as_mapping().unwrap();
                 b.iter(|| tau_engine::solve(&rule.detection, document))
@@ -27,6 +47,8 @@ macro_rules! bench_rule {
                 let rule = common::load_shaken_rule("benches", $rule);
                 assert_eq!(rule.validate().unwrap(), true);
 
+                print_rule(&rule);
+
                 let document = rule.true_positives[0].as_mapping().unwrap();
                 b.iter(|| tau_engine::solve(&rule.detection, document))
             }
@@ -37,6 +59,8 @@ macro_rules! bench_rule {
                 let rule = common::load_rule("benches", $rule);
                 assert_eq!(rule.validate().unwrap(), true);
 
+                print_rule(&rule);
+
                 let document = rule.true_negatives[0].as_mapping().unwrap();
                 b.iter(|| tau_engine::solve(&rule.detection, document))
             }
@@ -46,6 +70,8 @@ macro_rules! bench_rule {
             fn [< bench_ $rule _true_negative_shaken>] (b: &mut Bencher) {
                 let rule = common::load_shaken_rule("benches", $rule);
                 assert_eq!(rule.validate().unwrap(), true);
+
+                print_rule(&rule);
 
                 let document = rule.true_negatives[0].as_mapping().unwrap();
                 b.iter(|| tau_engine::solve(&rule.detection, document))
@@ -63,6 +89,8 @@ macro_rules! bench_test {
                 let rule = common::load_rule("tests", $rule);
                 assert_eq!(rule.validate().unwrap(), true);
 
+                print_rule(&rule);
+
                 let document = rule.true_positives[0].as_mapping().unwrap();
                 b.iter(|| tau_engine::solve(&rule.detection, document))
             }
@@ -72,6 +100,8 @@ macro_rules! bench_test {
             fn [< bench_ $rule _true_positive_shaken >] (b: &mut Bencher) {
                 let rule = common::load_shaken_rule("tests", $rule);
                 assert_eq!(rule.validate().unwrap(), true);
+
+                print_rule(&rule);
 
                 let document = rule.true_positives[0].as_mapping().unwrap();
                 b.iter(|| tau_engine::solve(&rule.detection, document))
@@ -83,6 +113,8 @@ macro_rules! bench_test {
                 let rule = common::load_rule("tests", $rule);
                 assert_eq!(rule.validate().unwrap(), true);
 
+                print_rule(&rule);
+
                 let document = rule.true_negatives[0].as_mapping().unwrap();
                 b.iter(|| tau_engine::solve(&rule.detection, document))
             }
@@ -92,6 +124,8 @@ macro_rules! bench_test {
             fn [< bench_ $rule _true_negative_shaken>] (b: &mut Bencher) {
                 let rule = common::load_shaken_rule("tests", $rule);
                 assert_eq!(rule.validate().unwrap(), true);
+
+                print_rule(&rule);
 
                 let document = rule.true_negatives[0].as_mapping().unwrap();
                 b.iter(|| tau_engine::solve(&rule.detection, document))
@@ -124,6 +158,7 @@ bench_test!("match_of_0");
 bench_test!("match_of_1");
 bench_test!("match_of_2");
 bench_test!("negate");
+bench_test!("negate_sequence");
 bench_test!("nested");
 bench_test!("nested_dot_notation");
 bench_test!("search_contains");

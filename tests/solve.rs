@@ -43,6 +43,7 @@ solve_rule!("match_of_0");
 solve_rule!("match_of_1");
 solve_rule!("match_of_2");
 solve_rule!("negate");
+solve_rule!("negate_sequence");
 solve_rule!("nested");
 solve_rule!("nested_dot_notation");
 solve_rule!("search_contains");

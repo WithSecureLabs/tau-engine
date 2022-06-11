@@ -9,7 +9,7 @@ use serde_yaml::{Mapping, Value as Yaml};
 use tracing::debug;
 
 use crate::identifier::{Identifier, IdentifierParser, Pattern};
-use crate::tokeniser::{BoolSym, DelSym, MatchSym, MiscSym, Token, Tokeniser};
+use crate::tokeniser::{BoolSym, DelSym, MatchSym, MiscSym, ModSym, Token, Tokeniser};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum MatchType {
@@ -90,7 +90,7 @@ pub enum Expression {
     BooleanGroup(BoolSym, Vec<Expression>),
     BooleanExpression(Box<Expression>, BoolSym, Box<Expression>),
     Boolean(bool),
-    Cast(String, MiscSym),
+    Cast(String, ModSym),
     Field(String),
     Float(f64),
     Identifier(String),
@@ -128,6 +128,25 @@ impl fmt::Display for Expression {
             Self::Nested(s, e) => write!(f, "nested({}, {})", s, e),
             Self::Null => write!(f, "null"),
             Self::Search(e, s, c) => write!(f, "search({}, {}, {})", s, e, c),
+        }
+    }
+}
+impl Expression {
+    pub fn is_solvable(&self) -> bool {
+        match self {
+            Self::Boolean(_)
+            | Self::Cast(_, _)
+            | Self::Field(_)
+            | Self::Float(_)
+            | Self::Integer(_)
+            | Self::Null
+            | Self::Search(_, _, _) => false,
+            Self::BooleanGroup(_, _)
+            | Self::BooleanExpression(_, _, _)
+            | Self::Identifier(_)
+            | Self::Match(_, _)
+            | Self::Negate(_)
+            | Self::Nested(_, _) => true,
         }
     }
 }
@@ -208,15 +227,15 @@ where
                         // Type enforcement
                         match (&left, &right) {
                             (
-                                Expression::Cast(_, MiscSym::Int),
-                                Expression::Cast(_, MiscSym::Int),
+                                Expression::Cast(_, ModSym::Int),
+                                Expression::Cast(_, ModSym::Int),
                             ) => {}
                             (
-                                Expression::Cast(_, MiscSym::Str),
-                                Expression::Cast(_, MiscSym::Str),
+                                Expression::Cast(_, ModSym::Str),
+                                Expression::Cast(_, ModSym::Str),
                             ) => {}
-                            (Expression::Cast(_, MiscSym::Int), Expression::Integer(_)) => {}
-                            (Expression::Integer(_), Expression::Cast(_, MiscSym::Int)) => {}
+                            (Expression::Cast(_, ModSym::Int), Expression::Integer(_)) => {}
+                            (Expression::Integer(_), Expression::Cast(_, ModSym::Int)) => {}
                             (_, _) => {
                                 return Err(crate::error::parse_invalid_expr(format!(
                                     "encountered - '{:?}'",
@@ -250,11 +269,11 @@ where
                         // Type enforcement
                         match (&left, &right) {
                             (
-                                Expression::Cast(_, MiscSym::Int),
-                                Expression::Cast(_, MiscSym::Int),
+                                Expression::Cast(_, ModSym::Int),
+                                Expression::Cast(_, ModSym::Int),
                             ) => {}
-                            (Expression::Cast(_, MiscSym::Int), Expression::Integer(_)) => {}
-                            (Expression::Integer(_), Expression::Cast(_, MiscSym::Int)) => {}
+                            (Expression::Cast(_, ModSym::Int), Expression::Integer(_)) => {}
+                            (Expression::Integer(_), Expression::Cast(_, ModSym::Int)) => {}
                             (_, _) => {
                                 return Err(crate::error::parse_invalid_expr(format!(
                                     "encountered - '{:?}'",
@@ -276,6 +295,7 @@ where
             | Token::Identifier(_)
             | Token::Integer(_)
             | Token::Miscellaneous(_)
+            | Token::Modifier(_)
             | Token::Match(_) => Err(crate::error::parse_invalid_token(format!(
                 "LED encountered - '{:?}'",
                 t
@@ -319,7 +339,28 @@ where
                 Token::Identifier(ref n) => Ok(Expression::Identifier(n.to_string())),
                 Token::Integer(ref n) => Ok(Expression::Integer(*n)),
                 Token::Miscellaneous(ref m) => match *m {
-                    MiscSym::Int => {
+                    MiscSym::Not => {
+                        let right = parse_expr(it, t.binding_power())?;
+                        match right {
+                            Expression::BooleanGroup(_, _)
+                            | Expression::BooleanExpression(_, _, _)
+                            | Expression::Boolean(_)
+                            | Expression::Identifier(_)
+                            | Expression::Match(_, _)
+                            | Expression::Negate(_)
+                            | Expression::Nested(_, _)
+                            | Expression::Search(_, _, _) => {}
+                            _ => {
+                                return Err(crate::error::parse_invalid_token(
+                                    "NUD expected a negatable expression",
+                                ))
+                            }
+                        }
+                        Ok(Expression::Negate(Box::new(right)))
+                    }
+                },
+                Token::Modifier(ref m) => match *m {
+                    ModSym::Int => {
                         // We expect Int(column_identifier)
                         if let Some(t) = it.next() {
                             match *t {
@@ -361,33 +402,63 @@ where
                         }
                         match *token {
                             Token::Identifier(ref s) => {
-                                Ok(Expression::Cast(s.to_string(), MiscSym::Int))
+                                Ok(Expression::Cast(s.to_string(), ModSym::Int))
                             }
                             _ => Err(crate::error::parse_invalid_token(
                                 "NUD expected column identifier",
                             )),
                         }
                     }
-                    MiscSym::Not => {
-                        let right = parse_expr(it, t.binding_power())?;
-                        match right {
-                            Expression::BooleanGroup(_, _)
-                            | Expression::BooleanExpression(_, _, _)
-                            | Expression::Boolean(_)
-                            | Expression::Identifier(_)
-                            | Expression::Match(_, _)
-                            | Expression::Negate(_)
-                            | Expression::Nested(_, _)
-                            | Expression::Search(_, _, _) => {}
-                            _ => {
-                                return Err(crate::error::parse_invalid_token(
-                                    "NUD expected a negatable expression",
-                                ))
+                    ModSym::Not => {
+                        // We expect Int(column_identifier)
+                        if let Some(t) = it.next() {
+                            match *t {
+                                Token::Delimiter(DelSym::LeftParenthesis) => {}
+                                _ => {
+                                    return Err(crate::error::parse_invalid_token(format!(
+                                        "NUD expected left parenthesis - '{:?}'",
+                                        t
+                                    )));
+                                }
                             }
+                        } else {
+                            return Err(crate::error::parse_invalid_token(
+                                "NUD expected left parenthesis",
+                            ));
                         }
-                        Ok(Expression::Negate(Box::new(right)))
+                        let token = match it.next() {
+                            Some(t) => t,
+                            None => {
+                                return Err(crate::error::parse_invalid_token(
+                                    "NUD expected column identifier",
+                                ));
+                            }
+                        };
+                        if let Some(t) = it.next() {
+                            match *t {
+                                Token::Delimiter(DelSym::RightParenthesis) => {}
+                                _ => {
+                                    return Err(crate::error::parse_invalid_token(format!(
+                                        "NUD expected right parenthesis - '{:?}'",
+                                        t
+                                    )));
+                                }
+                            }
+                        } else {
+                            return Err(crate::error::parse_invalid_token(
+                                "NUD expected right parenthesis",
+                            ));
+                        }
+                        match *token {
+                            Token::Identifier(ref s) => {
+                                Ok(Expression::Cast(s.to_string(), ModSym::Not))
+                            }
+                            _ => Err(crate::error::parse_invalid_token(
+                                "NUD expected column identifier",
+                            )),
+                        }
                     }
-                    MiscSym::Str => {
+                    ModSym::Str => {
                         // We expect string(column_identifier)
                         if let Some(t) = it.next() {
                             match *t {
@@ -429,7 +500,7 @@ where
                         }
                         match *token {
                             Token::Identifier(ref s) => {
-                                Ok(Expression::Cast(s.to_string(), MiscSym::Str))
+                                Ok(Expression::Cast(s.to_string(), ModSym::Str))
                             }
                             _ => Err(crate::error::parse_invalid_token(
                                 "NUD expected column identifier",
@@ -631,7 +702,7 @@ pub fn parse_identifier(yaml: &Yaml) -> crate::Result<Expression> {
 fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
     let mut expressions = vec![];
     for (k, v) in mapping {
-        let mut misc: Option<MiscSym> = None;
+        let mut misc: Option<ModSym> = None;
         let (e, f) = match k {
             Yaml::String(s) => {
                 // NOTE: Tokenise splits on whitespace, but this is undesired for keys, merge them
@@ -659,9 +730,9 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                     Expression::Cast(f, s) => {
                         misc = Some(s.clone());
                         match s {
-                            MiscSym::Int => (Expression::Cast(f.clone(), s), f),
-                            MiscSym::Not => (Expression::Field(f.clone()), f),
-                            MiscSym::Str => (Expression::Cast(f.clone(), s), f),
+                            ModSym::Int => (Expression::Cast(f.clone(), s), f),
+                            ModSym::Not => (Expression::Field(f.clone()), f),
+                            ModSym::Str => (Expression::Cast(f.clone(), s), f),
                         }
                     }
                     Expression::Identifier(s) => (Expression::Field(s.clone()), s),
@@ -704,13 +775,13 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
         };
         let expression = match v {
             Yaml::Bool(b) => {
-                if let Some(MiscSym::Int) = misc {
+                if let Some(ModSym::Int) = misc {
                     Expression::BooleanExpression(
                         Box::new(e.clone()),
                         BoolSym::Equal,
                         Box::new(Expression::Integer(if *b { 1 } else { 0 })),
                     )
-                } else if let Some(MiscSym::Str) = misc {
+                } else if let Some(ModSym::Str) = misc {
                     Expression::Search(Search::Exact(b.to_string()), f.to_owned(), true)
                 } else {
                     Expression::BooleanExpression(
@@ -722,7 +793,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
             }
             Yaml::Number(n) => {
                 if let Some(i) = n.as_i64() {
-                    if let Some(MiscSym::Str) = misc {
+                    if let Some(ModSym::Str) = misc {
                         Expression::Search(Search::Exact(i.to_string()), f.to_owned(), true)
                     } else {
                         Expression::BooleanExpression(
@@ -732,12 +803,12 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         )
                     }
                 } else if let Some(i) = n.as_f64() {
-                    if let Some(MiscSym::Int) = misc {
+                    if let Some(ModSym::Int) = misc {
                         return Err(crate::error::parse_invalid_ident(format!(
                             "float cannot be cast into an integer, encountered - {:?}",
                             k
                         )));
-                    } else if let Some(MiscSym::Str) = misc {
+                    } else if let Some(ModSym::Str) = misc {
                         Expression::Search(Search::Exact(i.to_string()), f.to_owned(), true)
                     } else {
                         Expression::BooleanExpression(
@@ -762,7 +833,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                 let identifier = s.to_owned().into_identifier()?;
                 let mut cast = false;
                 if let Some(ref m) = misc {
-                    if let MiscSym::Str = m {
+                    if let ModSym::Str = m {
                         cast = true;
                     }
                     match &identifier.pattern {
@@ -772,7 +843,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         | Pattern::EndsWith(_)
                         | Pattern::Exact(_)
                         | Pattern::StartsWith(_) => {
-                            if let MiscSym::Int = m {
+                            if let ModSym::Int = m {
                                 return Err(crate::error::parse_invalid_ident(format!(
                                     "cannot cast string to integer, encountered - {:?}",
                                     k
@@ -789,7 +860,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         | Pattern::FGreaterThanOrEqual(_)
                         | Pattern::FLessThan(_)
                         | Pattern::FLessThanOrEqual(_) => {
-                            if let MiscSym::Str = m {
+                            if let ModSym::Str = m {
                                 return Err(crate::error::parse_invalid_ident(format!(
                                     "cannot cast integer to string, encountered - {:?}",
                                     k
@@ -975,14 +1046,14 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                 for value in s {
                     let identifier = match value {
                         Yaml::Bool(b) => {
-                            if let Some(MiscSym::Int) = misc {
+                            if let Some(ModSym::Int) = misc {
                                 number = true;
                                 rest.push(Expression::BooleanExpression(
                                     Box::new(unmatched_e.clone()),
                                     BoolSym::Equal,
                                     Box::new(Expression::Integer(if *b { 1 } else { 0 })),
                                 ))
-                            } else if let Some(MiscSym::Str) = misc {
+                            } else if let Some(ModSym::Str) = misc {
                                 string = true;
                                 exact.push(Identifier {
                                     ignore_case: false,
@@ -1008,7 +1079,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         }
                         Yaml::Number(n) => {
                             if let Some(i) = n.as_i64() {
-                                if let Some(MiscSym::Str) = misc {
+                                if let Some(ModSym::Str) = misc {
                                     string = true;
                                     exact.push(Identifier {
                                         ignore_case: false,
@@ -1024,12 +1095,12 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                                 }
                                 continue;
                             } else if let Some(i) = n.as_f64() {
-                                if let Some(MiscSym::Int) = misc {
+                                if let Some(ModSym::Int) = misc {
                                     return Err(crate::error::parse_invalid_ident(format!(
                                         "float cannot be cast into an integer, encountered - {:?}",
                                         k
                                     )));
-                                } else if let Some(MiscSym::Str) = misc {
+                                } else if let Some(ModSym::Str) = misc {
                                     string = true;
                                     exact.push(Identifier {
                                         ignore_case: false,
@@ -1076,7 +1147,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         }
                     };
                     if let Some(ref m) = misc {
-                        if let MiscSym::Str = m {
+                        if let ModSym::Str = m {
                             cast = true;
                         }
                         match &identifier.pattern {
@@ -1086,7 +1157,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                             | Pattern::EndsWith(_)
                             | Pattern::Exact(_)
                             | Pattern::StartsWith(_) => {
-                                if let MiscSym::Int = m {
+                                if let ModSym::Int = m {
                                     return Err(crate::error::parse_invalid_ident(format!(
                                         "cannot cast string to integer, encountered - {:?}",
                                         k
@@ -1103,7 +1174,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                             | Pattern::FGreaterThanOrEqual(_)
                             | Pattern::FLessThan(_)
                             | Pattern::FLessThanOrEqual(_) => {
-                                if let MiscSym::Str = m {
+                                if let ModSym::Str = m {
                                     return Err(crate::error::parse_invalid_ident(format!(
                                         "cannot cast integer to string, encountered - {:?}",
                                         k
@@ -1299,7 +1370,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                             Search::AhoCorasick(
                                 Box::new(AhoCorasickBuilder::new().dfa(true).build(needles)),
                                 context,
-                                true,
+                                false,
                             ),
                             f.to_owned(),
                             cast,
@@ -1391,14 +1462,14 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                     }
                 }
                 if let Some(misc) = &misc {
-                    if let MiscSym::Int = misc {
+                    if let ModSym::Int = misc {
                         if boolean || mapping || string {
                             return Err(crate::error::parse_invalid_ident(
                                 "when casting to int all expressions must be of type int",
                             ));
                         }
                     }
-                    if let MiscSym::Str = &misc {
+                    if let ModSym::Str = &misc {
                         if boolean || mapping || number {
                             return Err(crate::error::parse_invalid_ident(
                                 "when casting to str all expressions must be of type str",
@@ -1417,7 +1488,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                 }
             }
         };
-        if let Some(MiscSym::Not) = misc {
+        if let Some(ModSym::Not) = misc {
             expressions.push(Expression::Negate(Box::new(expression)));
         } else {
             expressions.push(expression);
@@ -1493,22 +1564,31 @@ mod tests {
     #[test]
     fn parse_cast() {
         let e = parse(&vec![
-            Token::Miscellaneous(MiscSym::Int),
+            Token::Modifier(ModSym::Int),
             Token::Delimiter(DelSym::LeftParenthesis),
             Token::Identifier("identifier".to_owned()),
             Token::Delimiter(DelSym::RightParenthesis),
         ])
         .unwrap();
-        assert_eq!(Expression::Cast("identifier".to_string(), MiscSym::Int), e);
+        assert_eq!(Expression::Cast("identifier".to_string(), ModSym::Int), e);
 
         let e = parse(&vec![
-            Token::Miscellaneous(MiscSym::Str),
+            Token::Modifier(ModSym::Not),
             Token::Delimiter(DelSym::LeftParenthesis),
             Token::Identifier("identifier".to_owned()),
             Token::Delimiter(DelSym::RightParenthesis),
         ])
         .unwrap();
-        assert_eq!(Expression::Cast("identifier".to_string(), MiscSym::Str), e);
+        assert_eq!(Expression::Cast("identifier".to_string(), ModSym::Not), e);
+
+        let e = parse(&vec![
+            Token::Modifier(ModSym::Str),
+            Token::Delimiter(DelSym::LeftParenthesis),
+            Token::Identifier("identifier".to_owned()),
+            Token::Delimiter(DelSym::RightParenthesis),
+        ])
+        .unwrap();
+        assert_eq!(Expression::Cast("identifier".to_string(), ModSym::Str), e);
     }
 
     #[test]
@@ -1668,7 +1748,7 @@ mod tests {
     fn parse_invalid_0() {
         let e = parse(&vec![
             Token::Miscellaneous(MiscSym::Not),
-            Token::Miscellaneous(MiscSym::Int),
+            Token::Modifier(ModSym::Int),
             Token::Delimiter(DelSym::LeftParenthesis),
             Token::Identifier("condition".to_string()),
             Token::Delimiter(DelSym::RightParenthesis),
