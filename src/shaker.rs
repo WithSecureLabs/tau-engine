@@ -6,6 +6,43 @@ use regex::{RegexBuilder, RegexSetBuilder};
 use crate::parser::{Expression, Match, MatchType, Search};
 use crate::tokeniser::BoolSym;
 
+pub fn coalesce(expression: Expression, identifiers: &HashMap<String, Expression>) -> Expression {
+    match expression {
+        Expression::BooleanGroup(symbol, expressions) => {
+            let mut scratch = vec![];
+            for expression in expressions {
+                scratch.push(coalesce(expression, identifiers));
+            }
+            Expression::BooleanGroup(symbol, scratch)
+        }
+        Expression::BooleanExpression(left, symbol, right) => {
+            let left = coalesce(*left, identifiers);
+            let right = coalesce(*right, identifiers);
+            Expression::BooleanExpression(Box::new(left), symbol, Box::new(right))
+        }
+        Expression::Identifier(i) => identifiers
+            .get(&i)
+            .expect("could not get identifier")
+            .clone(),
+        Expression::Match(symbol, expression) => {
+            Expression::Match(symbol, Box::new(coalesce(*expression, identifiers)))
+        }
+        Expression::Negate(expression) => {
+            Expression::Negate(Box::new(coalesce(*expression, identifiers)))
+        }
+        Expression::Nested(field, expression) => {
+            Expression::Nested(field, Box::new(coalesce(*expression, identifiers)))
+        }
+        Expression::Boolean(_)
+        | Expression::Cast(_, _)
+        | Expression::Field(_)
+        | Expression::Float(_)
+        | Expression::Integer(_)
+        | Expression::Null
+        | Expression::Search(_, _, _) => expression,
+    }
+}
+
 pub fn shake(expression: Expression) -> Expression {
     match expression {
         Expression::BooleanGroup(symbol, expressions) => {

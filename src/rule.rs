@@ -154,12 +154,16 @@ impl<'de> Deserialize<'de> for Detection {
 
 /// A `RuleLoader` can be used to create a `Rule` with custom configuration.
 pub struct RuleLoader {
+    coalesce: bool,
     shake: bool,
 }
 
 impl Default for RuleLoader {
     fn default() -> Self {
-        Self { shake: true }
+        Self {
+            coalesce: false,
+            shake: true,
+        }
     }
 }
 
@@ -178,34 +182,42 @@ impl RuleLoader {
     /// Loads the rule from a YAML string using the configuration set on the loader.
     pub fn from_str(self, rule: &str) -> crate::Result<Rule> {
         let rule: Rule = serde_yaml::from_str(rule).map_err(crate::error::rule_invalid)?;
-        if self.shake {
-            let detection = Detection {
-                expression: shaker::shake(rule.detection.expression),
-                identifiers: rule
-                    .detection
-                    .identifiers
-                    .into_iter()
-                    .map(|(k, v)| (k, shaker::shake(v)))
-                    .collect(),
-
-                // FIXME: If we debug with these there will be confusion, we should probs remove
-                // them...
-                expression_raw: rule.detection.expression_raw,
-                identifiers_raw: rule.detection.identifiers_raw,
-            };
-            Ok(Rule {
-                detection,
-                true_negatives: rule.true_negatives,
-                true_positives: rule.true_positives,
-            })
-        } else {
-            Ok(rule)
+        // FIXME: If we debug with these there will be confusion, as the raw values will be
+        // incorrect.
+        let mut detection = rule.detection;
+        if self.coalesce {
+            detection.expression = shaker::coalesce(detection.expression, &detection.identifiers);
+            detection.identifiers.clear();
         }
+        if self.shake {
+            detection.expression = shaker::shake(detection.expression);
+            detection.identifiers = detection
+                .identifiers
+                .into_iter()
+                .map(|(k, v)| (k, shaker::shake(v)))
+                .collect();
+        }
+        Ok(Rule {
+            detection,
+            true_negatives: rule.true_negatives,
+            true_positives: rule.true_positives,
+        })
+    }
+
+    /// Allow Tau to coalesce the identifier's expressions into the condition.
+    ///
+    /// This allows for the identifier's expressions to be embedded for increased speed at the cost
+    /// of space.
+    ///
+    /// This option is disabled by default.
+    pub fn coalesce(mut self, yes: bool) -> Self {
+        self.coalesce = yes;
+        self
     }
 
     /// Allow Tau to optimise the rule when loaded.
     ///
-    /// This option is disabled by default.
+    /// This option is enabled by default.
     pub fn shake(mut self, yes: bool) -> Self {
         self.shake = yes;
         self

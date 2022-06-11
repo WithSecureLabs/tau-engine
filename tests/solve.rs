@@ -37,6 +37,8 @@ solve_rule!("hash");
 solve_rule!("float");
 solve_rule!("identifier");
 solve_rule!("integer");
+solve_rule!("many_ands");
+solve_rule!("many_and_nots");
 solve_rule!("match_all");
 solve_rule!("match_all_identifier");
 solve_rule!("match_of_0");

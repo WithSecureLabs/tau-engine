@@ -152,6 +152,8 @@ bench_test!("cast_str_field");
 bench_test!("float");
 bench_test!("identifier");
 bench_test!("integer");
+bench_test!("many_ands");
+bench_test!("many_and_nots");
 bench_test!("match_all");
 bench_test!("match_all_identifier");
 bench_test!("match_of_0");

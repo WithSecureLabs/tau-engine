@@ -640,13 +640,51 @@ pub(crate) fn solve_expression(
             let (_, group) = match **e {
                 Expression::Identifier(ref identifier) => match identifiers.get(identifier) {
                     Some(Expression::BooleanGroup(o, g)) => (o, g),
-                    Some(e) => return solve_expression(e, identifiers, document),
+                    Some(e) => {
+                        return match solve_expression(e, identifiers, document) {
+                            SolverResult::True => {
+                                if c == 0 {
+                                    SolverResult::False
+                                } else {
+                                    SolverResult::True
+                                }
+                            }
+                            SolverResult::False => {
+                                if c == 0 {
+                                    SolverResult::True
+                                } else {
+                                    SolverResult::False
+                                }
+                            }
+                            SolverResult::Missing => SolverResult::Missing,
+                        }
+                    }
                     _ => {
                         unreachable!();
                     }
                 },
                 Expression::BooleanGroup(ref o, ref g) => (o, g),
-                _ => unreachable!(),
+                _ => {
+                    // NOTE: We should not really land here but people can write garbage which
+                    // makes us land here...
+                    return match solve_expression(e, identifiers, document) {
+                        SolverResult::True => {
+                            if c == 0 {
+                                SolverResult::False
+                            } else {
+                                SolverResult::True
+                            }
+                        }
+                        SolverResult::False => {
+                            if c == 0 {
+                                SolverResult::True
+                            } else {
+                                SolverResult::False
+                            }
+                        }
+                        SolverResult::Missing => SolverResult::Missing,
+                    };
+                }
             };
             let mut count = 0;
             let mut res = SolverResult::Missing;

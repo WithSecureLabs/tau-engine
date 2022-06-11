@@ -1,0 +1,17 @@
+detection:
+  A:
+    phrase: "*quick*"
+  B:
+    phrase: "*brown*"
+  C:
+    phrase: "*fox*"
+  D:
+    phrase: "*jumps*"
+
+  condition: not A and not B and not C and not D
+
+true_positives:
+  - phrase: lorem ipsum dolor sit amet
+
+true_negatives:
+  - phrase: the quick brown fox jumps over the lazy dog
