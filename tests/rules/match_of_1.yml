@@ -2,7 +2,7 @@ detection:
   A:
     phrase: "*quick*"
 
-  condition: all(A)
+  condition: of(A, 1)
 
 true_positives:
   - phrase: the quick brown fox jumps over the lazy dog

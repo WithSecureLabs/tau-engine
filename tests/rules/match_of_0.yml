@@ -1,11 +1,15 @@
 detection:
   A:
-    phrase: "*quick*"
+    of(phrase, 0):
+    - "*quick*"
+    - "*brown*"
+    - "*fox*"
+    - "*jumps*"
 
-  condition: of(A, 1)
+  condition: A
 
 true_positives:
-  - phrase: the quick brown fox jumps over the lazy dog
+  - phrase: lorem ipsum dolor sit amet
 
 true_negatives:
-  - phrase: lorem ipsum dolor sit amet
+  - phrase: the quick brown fox jumps over the lazy dog

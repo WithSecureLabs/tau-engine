@@ -663,7 +663,9 @@ pub(crate) fn solve_expression(
                     match (value, cast) {
                         (Value::String(ref x), _) => {
                             count += slow_aho(a, m, x);
-                            if count >= c {
+                            if c == 0 && count > 0 {
+                                return SolverResult::False;
+                            } else if count >= c {
                                 return SolverResult::True;
                             }
                         }
@@ -672,7 +674,9 @@ pub(crate) fn solve_expression(
                             for v in x.iter() {
                                 if let Some(x) = v.as_str() {
                                     let hits = slow_aho(a, m, x);
-                                    if count + hits >= c {
+                                    if c == 0 && hits > 0 {
+                                        return SolverResult::False;
+                                    } else if count + hits >= c {
                                         return SolverResult::True;
                                     } else if hits > max {
                                         max = hits;
@@ -686,7 +690,9 @@ pub(crate) fn solve_expression(
                                         _ => continue,
                                     };
                                     let hits = slow_aho(a, m, x.as_str());
-                                    if count + hits >= c {
+                                    if c == 0 && hits > 0 {
+                                        return SolverResult::False;
+                                    } else if count + hits >= c {
                                         return SolverResult::True;
                                     } else if hits > max {
                                         max = hits;
@@ -698,28 +704,36 @@ pub(crate) fn solve_expression(
                         (Value::Bool(x), true) => {
                             let x = x.to_string();
                             count += slow_aho(a, m, x.as_str());
-                            if count >= c {
+                            if c == 0 && count > 0 {
+                                return SolverResult::False;
+                            } else if count >= c {
                                 return SolverResult::True;
                             }
                         }
                         (Value::Float(x), true) => {
                             let x = x.to_string();
                             count += slow_aho(a, m, x.as_str());
-                            if count >= c {
+                            if c == 0 && count > 0 {
+                                return SolverResult::False;
+                            } else if count >= c {
                                 return SolverResult::True;
                             }
                         }
                         (Value::Int(x), true) => {
                             let x = x.to_string();
                             count += slow_aho(a, m, x.as_str());
-                            if count >= c {
+                            if c == 0 && count > 0 {
+                                return SolverResult::False;
+                            } else if count >= c {
                                 return SolverResult::True;
                             }
                         }
                         (Value::UInt(x), true) => {
                             let x = x.to_string();
                             count += slow_aho(a, m, x.as_str());
-                            if count >= c {
+                            if c == 0 && count > 0 {
+                                return SolverResult::False;
+                            } else if count >= c {
                                 return SolverResult::True;
                             }
                         }
@@ -744,7 +758,9 @@ pub(crate) fn solve_expression(
                             for _ in s.matches(x).iter() {
                                 count += 1;
                             }
-                            if count >= c {
+                            if c == 0 && count > 0 {
+                                return SolverResult::False;
+                            } else if count >= c {
                                 return SolverResult::True;
                             }
                         }
@@ -756,7 +772,9 @@ pub(crate) fn solve_expression(
                                     for _ in s.matches(x).iter() {
                                         hits += 1;
                                     }
-                                    if count + hits >= c {
+                                    if c == 0 && hits > 0 {
+                                        return SolverResult::False;
+                                    } else if count + hits >= c {
                                         return SolverResult::True;
                                     } else if hits > max {
                                         max = hits;
@@ -773,7 +791,9 @@ pub(crate) fn solve_expression(
                                     for _ in s.matches(x.as_str()).iter() {
                                         hits += 1;
                                     }
-                                    if count + hits >= c {
+                                    if c == 0 && hits > 0 {
+                                        return SolverResult::False;
+                                    } else if count + hits >= c {
                                         return SolverResult::True;
                                     } else if hits > max {
                                         max = hits;
@@ -787,7 +807,9 @@ pub(crate) fn solve_expression(
                             for _ in s.matches(x.as_str()).iter() {
                                 count += 1;
                             }
-                            if count >= c {
+                            if c == 0 && count > 0 {
+                                return SolverResult::False;
+                            } else if count >= c {
                                 return SolverResult::True;
                             }
                         }
@@ -796,7 +818,9 @@ pub(crate) fn solve_expression(
                             for _ in s.matches(x.as_str()).iter() {
                                 count += 1;
                             }
-                            if count >= c {
+                            if c == 0 && count > 0 {
+                                return SolverResult::False;
+                            } else if count >= c {
                                 return SolverResult::True;
                             }
                         }
@@ -805,7 +829,9 @@ pub(crate) fn solve_expression(
                             for _ in s.matches(x.as_str()).iter() {
                                 count += 1;
                             }
-                            if count >= c {
+                            if c == 0 && count > 0 {
+                                return SolverResult::False;
+                            } else if count >= c {
                                 return SolverResult::True;
                             }
                         }
@@ -814,7 +840,9 @@ pub(crate) fn solve_expression(
                             for _ in s.matches(x.as_str()).iter() {
                                 count += 1;
                             }
-                            if count >= c {
+                            if c == 0 && count > 0 {
+                                return SolverResult::False;
+                            } else if count >= c {
                                 return SolverResult::True;
                             }
                         }
@@ -825,6 +853,9 @@ pub(crate) fn solve_expression(
                             );
                             return SolverResult::Missing;
                         }
+                    }
+                    if c == 0 {
+                        return SolverResult::True;
                     }
                 } else {
                     match solve_expression(expression, identifiers, document) {
