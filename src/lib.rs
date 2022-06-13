@@ -182,9 +182,9 @@ mod error;
 mod identifier;
 #[cfg(feature = "json")]
 mod json;
+mod optimiser;
 mod parser;
 mod rule;
-mod shaker;
 mod solver;
 mod tokeniser;
 mod value;
@@ -193,11 +193,14 @@ mod yaml;
 #[cfg(feature = "core")]
 /// Exposes some of Tau Engine's internals.
 pub mod core {
+    /// Exposes some of Tau Engine's internal optimisations so that Expressions can be built by hand.
+    pub mod optimiser {
+        pub use crate::optimiser::*;
+    }
     /// Exposes some of Tau Engine's internal parsing so that Expressions can be built by hand.
     pub mod parser {
         pub use crate::identifier::*;
         pub use crate::parser::*;
-        pub use crate::shaker::*;
         pub use crate::tokeniser::*;
     }
     pub use crate::rule::Detection;

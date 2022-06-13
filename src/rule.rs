@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 use serde_yaml::Value as Yaml;
 
 use crate::document::Document;
+use crate::optimiser;
 use crate::parser::{self, Expression};
-use crate::shaker;
 use crate::solver;
 use crate::tokeniser::{ModSym, Token, Tokeniser};
 
@@ -186,15 +186,16 @@ impl RuleLoader {
         // incorrect.
         let mut detection = rule.detection;
         if self.coalesce {
-            detection.expression = shaker::coalesce(detection.expression, &detection.identifiers);
+            detection.expression =
+                optimiser::coalesce(detection.expression, &detection.identifiers);
             detection.identifiers.clear();
         }
         if self.shake {
-            detection.expression = shaker::shake(detection.expression);
+            detection.expression = optimiser::shake(detection.expression);
             detection.identifiers = detection
                 .identifiers
                 .into_iter()
-                .map(|(k, v)| (k, shaker::shake(v)))
+                .map(|(k, v)| (k, optimiser::shake(v)))
                 .collect();
         }
         Ok(Rule {
