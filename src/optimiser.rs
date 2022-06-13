@@ -43,7 +43,7 @@ pub fn coalesce(expression: Expression, identifiers: &HashMap<String, Expression
     }
 }
 
-pub fn shake(expression: Expression) -> Expression {
+pub fn shake(expression: Expression, rewrite: bool) -> Expression {
     match expression {
         Expression::BooleanGroup(symbol, expressions) => {
             let length = expressions.len();
@@ -51,7 +51,7 @@ pub fn shake(expression: Expression) -> Expression {
                 BoolSym::And => {
                     let mut scratch = vec![];
                     for expression in expressions {
-                        let shaken = shake(expression);
+                        let shaken = shake(expression, rewrite);
                         scratch.push(shaken);
                     }
                     scratch
@@ -74,7 +74,7 @@ pub fn shake(expression: Expression) -> Expression {
                     let mut rest = vec![];
 
                     for expression in expressions {
-                        let shaken = shake(expression);
+                        let shaken = shake(expression, rewrite);
 
                         match shaken {
                             Expression::Nested(field, expression) => {
@@ -188,9 +188,10 @@ pub fn shake(expression: Expression) -> Expression {
                                     .into_iter()
                                     .next()
                                     .expect("could not get expression"),
+                                rewrite,
                             )
                         } else {
-                            shake(Expression::BooleanGroup(symbol, expressions))
+                            shake(Expression::BooleanGroup(symbol, expressions), rewrite)
                         };
                         rest.push(Expression::Nested(field, Box::new(shaken)));
                     }
@@ -291,7 +292,7 @@ pub fn shake(expression: Expression) -> Expression {
                 _ => unreachable!(),
             };
             if expressions.len() != length {
-                shake(Expression::BooleanGroup(symbol, expressions))
+                shake(Expression::BooleanGroup(symbol, expressions), rewrite)
             } else if expressions.len() == 1 {
                 expressions
                     .into_iter()
@@ -302,8 +303,8 @@ pub fn shake(expression: Expression) -> Expression {
             }
         }
         Expression::BooleanExpression(left, symbol, right) => {
-            let left = shake(*left);
-            let right = shake(*right);
+            let left = shake(*left, rewrite);
+            let right = shake(*right, rewrite);
             match (left, symbol, right) {
                 (
                     Expression::BooleanGroup(BoolSym::And, mut left),
@@ -311,16 +312,16 @@ pub fn shake(expression: Expression) -> Expression {
                     Expression::BooleanGroup(BoolSym::And, right),
                 ) => {
                     left.extend(right);
-                    shake(Expression::BooleanGroup(BoolSym::And, left))
+                    shake(Expression::BooleanGroup(BoolSym::And, left), rewrite)
                 }
                 (Expression::BooleanGroup(BoolSym::And, mut left), BoolSym::And, right) => {
                     left.push(right);
-                    shake(Expression::BooleanGroup(BoolSym::And, left))
+                    shake(Expression::BooleanGroup(BoolSym::And, left), rewrite)
                 }
                 (left, BoolSym::And, Expression::BooleanGroup(BoolSym::And, right)) => {
                     let mut left = vec![left];
                     left.extend(right);
-                    shake(Expression::BooleanGroup(BoolSym::And, left))
+                    shake(Expression::BooleanGroup(BoolSym::And, left), rewrite)
                 }
                 (
                     Expression::BooleanGroup(BoolSym::Or, mut left),
@@ -328,34 +329,40 @@ pub fn shake(expression: Expression) -> Expression {
                     Expression::BooleanGroup(BoolSym::Or, right),
                 ) => {
                     left.extend(right);
-                    shake(Expression::BooleanGroup(BoolSym::Or, left))
+                    shake(Expression::BooleanGroup(BoolSym::Or, left), rewrite)
                 }
                 (Expression::BooleanGroup(BoolSym::Or, mut left), BoolSym::Or, right) => {
                     left.push(right);
-                    shake(Expression::BooleanGroup(BoolSym::Or, left))
+                    shake(Expression::BooleanGroup(BoolSym::Or, left), rewrite)
                 }
                 (left, BoolSym::Or, Expression::BooleanGroup(BoolSym::Or, right)) => {
                     let mut left = vec![left];
                     left.extend(right);
-                    shake(Expression::BooleanGroup(BoolSym::Or, left))
+                    shake(Expression::BooleanGroup(BoolSym::Or, left), rewrite)
                 }
-                (Expression::BooleanExpression(x, BoolSym::And, y), BoolSym::And, z) => {
-                    shake(Expression::BooleanGroup(BoolSym::And, vec![*x, *y, z]))
-                }
-                (x, BoolSym::And, Expression::BooleanExpression(y, BoolSym::And, z)) => {
-                    shake(Expression::BooleanGroup(BoolSym::And, vec![x, *y, *z]))
-                }
-                (Expression::BooleanExpression(x, BoolSym::Or, y), BoolSym::Or, z) => {
-                    shake(Expression::BooleanGroup(BoolSym::Or, vec![*x, *y, z]))
-                }
-                (x, BoolSym::Or, Expression::BooleanExpression(y, BoolSym::Or, z)) => {
-                    shake(Expression::BooleanGroup(BoolSym::Or, vec![x, *y, *z]))
-                }
-                (Expression::Negate(left), BoolSym::And, Expression::Negate(right)) => {
-                    shake(Expression::Negate(Box::new(shake(
+                (Expression::BooleanExpression(x, BoolSym::And, y), BoolSym::And, z) => shake(
+                    Expression::BooleanGroup(BoolSym::And, vec![*x, *y, z]),
+                    rewrite,
+                ),
+                (x, BoolSym::And, Expression::BooleanExpression(y, BoolSym::And, z)) => shake(
+                    Expression::BooleanGroup(BoolSym::And, vec![x, *y, *z]),
+                    rewrite,
+                ),
+                (Expression::BooleanExpression(x, BoolSym::Or, y), BoolSym::Or, z) => shake(
+                    Expression::BooleanGroup(BoolSym::Or, vec![*x, *y, z]),
+                    rewrite,
+                ),
+                (x, BoolSym::Or, Expression::BooleanExpression(y, BoolSym::Or, z)) => shake(
+                    Expression::BooleanGroup(BoolSym::Or, vec![x, *y, *z]),
+                    rewrite,
+                ),
+                (Expression::Negate(left), BoolSym::And, Expression::Negate(right)) => shake(
+                    Expression::Negate(Box::new(shake(
                         Expression::BooleanExpression(left, BoolSym::Or, right),
-                    ))))
-                }
+                        rewrite,
+                    ))),
+                    rewrite,
+                ),
                 (left, _, right) => {
                     Expression::BooleanExpression(Box::new(left), symbol, Box::new(right))
                 }
@@ -373,13 +380,65 @@ pub fn shake(expression: Expression) -> Expression {
         }
         Expression::Negate(expression) => match *expression {
             Expression::BooleanGroup(BoolSym::Or, _) => {
-                shake(Expression::Match(Match::Of(0), expression))
+                shake(Expression::Match(Match::Of(0), expression), rewrite)
             }
-            Expression::Negate(inner) => shake(*inner),
-            _ => Expression::Negate(Box::new(shake(*expression))),
+            Expression::Negate(inner) => shake(*inner, rewrite),
+            _ => Expression::Negate(Box::new(shake(*expression, rewrite))),
         },
         Expression::Nested(field, expression) => {
-            Expression::Nested(field, Box::new(shake(*expression)))
+            Expression::Nested(field, Box::new(shake(*expression, rewrite)))
+        }
+        Expression::Search(Search::Regex(regex, insensitive), f, c) => {
+            if rewrite {
+                let mut pattern = regex.as_str().to_owned();
+                if let Some(tail) = pattern.strip_prefix(".*") {
+                    pattern = tail.to_owned();
+                }
+                if let Some(head) = pattern.strip_suffix(".*") {
+                    pattern = head.to_owned();
+                }
+                Expression::Search(
+                    Search::Regex(
+                        RegexBuilder::new(&pattern)
+                            .case_insensitive(insensitive)
+                            .build()
+                            .expect("could not build regex"),
+                        insensitive,
+                    ),
+                    f,
+                    c,
+                )
+            } else {
+                Expression::Search(Search::Regex(regex, insensitive), f, c)
+            }
+        }
+        Expression::Search(Search::RegexSet(regex, insensitive), f, c) => {
+            if rewrite {
+                let mut patterns = vec![];
+                for pattern in regex.patterns() {
+                    let mut pattern = pattern.to_owned();
+                    if let Some(tail) = pattern.strip_prefix(".*") {
+                        pattern = tail.to_owned();
+                    }
+                    if let Some(head) = pattern.strip_suffix(".*") {
+                        pattern = head.to_owned();
+                    }
+                    patterns.push(pattern);
+                }
+                Expression::Search(
+                    Search::RegexSet(
+                        RegexSetBuilder::new(patterns)
+                            .case_insensitive(insensitive)
+                            .build()
+                            .expect("could not build regex"),
+                        insensitive,
+                    ),
+                    f,
+                    c,
+                )
+            } else {
+                Expression::Search(Search::RegexSet(regex, insensitive), f, c)
+            }
         }
         Expression::Boolean(_)
         | Expression::Cast(_, _)
@@ -428,7 +487,7 @@ mod tests {
             BoolSym::And,
             Box::new(Expression::Negate(Box::new(Expression::Null))),
         );
-        let shaken = shake(expression);
+        let shaken = shake(expression, false);
 
         let expected = Expression::Negate(Box::new(Expression::BooleanExpression(
             Box::new(Expression::Null),
@@ -447,7 +506,7 @@ mod tests {
                 Box::new(Expression::Negate(Box::new(Expression::Null))),
             )),
         );
-        let shaken = shake(expression);
+        let shaken = shake(expression, false);
 
         let expected = Expression::Match(
             Match::Of(0),
@@ -467,7 +526,7 @@ mod tests {
             BoolSym::And,
             Box::new(Expression::Null),
         );
-        let shaken = shake(expression);
+        let shaken = shake(expression, false);
 
         let expected = Expression::BooleanExpression(
             Box::new(Expression::Null),
@@ -486,7 +545,7 @@ mod tests {
                 Box::new(Expression::Null),
             )),
         );
-        let shaken = shake(expression);
+        let shaken = shake(expression, false);
 
         let expected = Expression::BooleanGroup(
             BoolSym::And,
@@ -503,7 +562,7 @@ mod tests {
             BoolSym::Or,
             Box::new(Expression::Null),
         );
-        let shaken = shake(expression);
+        let shaken = shake(expression, false);
 
         let expected = Expression::BooleanExpression(
             Box::new(Expression::Null),
@@ -522,7 +581,7 @@ mod tests {
                 Box::new(Expression::Null),
             )),
         );
-        let shaken = shake(expression);
+        let shaken = shake(expression, false);
 
         let expected = Expression::BooleanGroup(
             BoolSym::Or,
@@ -563,13 +622,13 @@ mod tests {
                 ),
             ],
         );
-        let shaken = shake(expression);
+        let shaken = shake(expression, false);
 
         let expected = Expression::Nested(
             "ids".to_owned(),
             Box::new(Expression::Search(
                 Search::AhoCorasick(
-                    Box::new(AhoCorasickBuilder::new().dfa(true).build(vec![
+                    Box::new(AhoCorasickBuilder::new().dfa(false).build(vec![
                         "e2ec14cb-299e-4adf-bb09-04a6a8417bca",
                         "e2ec14cb-299e-4adf-bb09-04a6a8417bcb",
                         "e2ec14cb-299e-4adf-bb09-04a6a8417bcc",
@@ -599,7 +658,7 @@ mod tests {
                     Search::AhoCorasick(
                         Box::new(
                             AhoCorasickBuilder::new()
-                                .dfa(true)
+                                .dfa(false)
                                 .ascii_case_insensitive(false)
                                 .build(vec![
                                     "Quick".to_owned(),
@@ -621,8 +680,8 @@ mod tests {
                     Search::AhoCorasick(
                         Box::new(
                             AhoCorasickBuilder::new()
-                                .dfa(true)
-                                .ascii_case_insensitive(true)
+                                .dfa(false)
+                                .ascii_case_insensitive(false)
                                 .build(vec![
                                     "quick".to_owned(),
                                     "brown".to_owned(),
@@ -634,7 +693,7 @@ mod tests {
                             MatchType::Exact("brown".to_owned()),
                             MatchType::EndsWith("fox".to_owned()),
                         ],
-                        true,
+                        false,
                     ),
                     "name".to_owned(),
                     false,
@@ -660,10 +719,10 @@ mod tests {
                 Expression::Search(
                     Search::Regex(
                         RegexBuilder::new("bar")
-                            .case_insensitive(true)
+                            .case_insensitive(false)
                             .build()
                             .unwrap(),
-                        true,
+                        false,
                     ),
                     "name".to_owned(),
                     false,
@@ -682,10 +741,10 @@ mod tests {
                 Expression::Search(
                     Search::RegexSet(
                         RegexSetBuilder::new(vec!["ipsum"])
-                            .case_insensitive(true)
+                            .case_insensitive(false)
                             .build()
                             .unwrap(),
-                        true,
+                        false,
                     ),
                     "name".to_owned(),
                     false,
@@ -702,7 +761,7 @@ mod tests {
                 ),
             ],
         );
-        let shaken = shake(expression);
+        let shaken = shake(expression, false);
 
         let expected = Expression::BooleanGroup(
             BoolSym::Or,
@@ -720,7 +779,7 @@ mod tests {
                     Search::AhoCorasick(
                         Box::new(
                             AhoCorasickBuilder::new()
-                                .dfa(true)
+                                .dfa(false)
                                 .ascii_case_insensitive(false)
                                 .build(vec![
                                     "Quick".to_owned(),
@@ -750,8 +809,8 @@ mod tests {
                     Search::AhoCorasick(
                         Box::new(
                             AhoCorasickBuilder::new()
-                                .dfa(true)
-                                .ascii_case_insensitive(true)
+                                .dfa(false)
+                                .ascii_case_insensitive(false)
                                 .build(vec![
                                     "quick".to_owned(),
                                     "brown".to_owned(),
@@ -763,7 +822,7 @@ mod tests {
                             MatchType::Exact("brown".to_owned()),
                             MatchType::EndsWith("fox".to_owned()),
                         ],
-                        true,
+                        false,
                     ),
                     "name".to_owned(),
                     false,
@@ -771,10 +830,10 @@ mod tests {
                 Expression::Search(
                     Search::RegexSet(
                         RegexSetBuilder::new(vec!["bar", "ipsum"])
-                            .case_insensitive(true)
+                            .case_insensitive(false)
                             .build()
                             .unwrap(),
-                        true,
+                        false,
                     ),
                     "name".to_owned(),
                     false,
@@ -800,7 +859,7 @@ mod tests {
     fn shake_group_or_1() {
         // NOTE: This is not a solvable expression but tests what we need testing
         let expression = Expression::BooleanGroup(BoolSym::Or, vec![Expression::Null]);
-        let shaken = shake(expression);
+        let shaken = shake(expression, false);
 
         let expected = Expression::Null;
 
@@ -832,13 +891,13 @@ mod tests {
                 ],
             )),
         );
-        let shaken = shake(expression);
+        let shaken = shake(expression, false);
 
         let expected = Expression::Nested(
             "ids".to_owned(),
             Box::new(Expression::Search(
                 Search::AhoCorasick(
-                    Box::new(AhoCorasickBuilder::new().dfa(true).build(vec![
+                    Box::new(AhoCorasickBuilder::new().dfa(false).build(vec![
                         "e2ec14cb-299e-4adf-bb09-04a6a8417bca",
                         "e2ec14cb-299e-4adf-bb09-04a6a8417bcb",
                         "e2ec14cb-299e-4adf-bb09-04a6a8417bcc",
@@ -867,7 +926,7 @@ mod tests {
                 vec![Expression::Null, Expression::Null],
             )),
         );
-        let shaken = shake(expression);
+        let shaken = shake(expression, false);
 
         let expected =
             Expression::BooleanGroup(BoolSym::And, vec![Expression::Null, Expression::Null]);
@@ -879,9 +938,45 @@ mod tests {
     fn shake_negate() {
         let expression =
             Expression::Negate(Box::new(Expression::Negate(Box::new(Expression::Null))));
-        let shaken = shake(expression);
+        let shaken = shake(expression, false);
 
         let expected = Expression::Null;
+
+        assert_eq!(shaken, expected);
+    }
+
+    #[test]
+    fn rewrite_regex() {
+        let expression = Expression::Search(
+            Search::Regex(RegexBuilder::new(".*foo.*").build().unwrap(), false),
+            "name".to_owned(),
+            false,
+        );
+        let shaken = shake(expression, true);
+
+        let expected = Expression::Search(
+            Search::Regex(RegexBuilder::new("foo").build().unwrap(), false),
+            "name".to_owned(),
+            false,
+        );
+
+        assert_eq!(shaken, expected);
+
+        let expression = Expression::Search(
+            Search::RegexSet(
+                RegexSetBuilder::new(vec![".*foo.*"]).build().unwrap(),
+                false,
+            ),
+            "name".to_owned(),
+            false,
+        );
+        let shaken = shake(expression, true);
+
+        let expected = Expression::Search(
+            Search::RegexSet(RegexSetBuilder::new(vec!["foo"]).build().unwrap(), false),
+            "name".to_owned(),
+            false,
+        );
 
         assert_eq!(shaken, expected);
     }

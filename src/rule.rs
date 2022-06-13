@@ -155,6 +155,7 @@ impl<'de> Deserialize<'de> for Detection {
 /// A `RuleLoader` can be used to create a `Rule` with custom configuration.
 pub struct RuleLoader {
     coalesce: bool,
+    rewrite: bool,
     shake: bool,
 }
 
@@ -162,6 +163,7 @@ impl Default for RuleLoader {
     fn default() -> Self {
         Self {
             coalesce: false,
+            rewrite: false,
             shake: true,
         }
     }
@@ -191,11 +193,11 @@ impl RuleLoader {
             detection.identifiers.clear();
         }
         if self.shake {
-            detection.expression = optimiser::shake(detection.expression);
+            detection.expression = optimiser::shake(detection.expression, self.rewrite);
             detection.identifiers = detection
                 .identifiers
                 .into_iter()
-                .map(|(k, v)| (k, optimiser::shake(v)))
+                .map(|(k, v)| (k, optimiser::shake(v, self.rewrite)))
                 .collect();
         }
         Ok(Rule {
@@ -213,6 +215,14 @@ impl RuleLoader {
     /// This option is disabled by default.
     pub fn coalesce(mut self, yes: bool) -> Self {
         self.coalesce = yes;
+        self
+    }
+
+    /// Allow Tau to rewrite inefficient string searches.
+    ///
+    /// This option is disabled by default. This option is only applied if shaking is enabled.
+    pub fn rewrite(mut self, yes: bool) -> Self {
+        self.rewrite = yes;
         self
     }
 
