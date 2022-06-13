@@ -450,6 +450,8 @@ pub(crate) fn solve_expression(
                     _ => unreachable!(),
                 },
                 Expression::BooleanGroup(ref o, ref g) => (o, g),
+                // FIXME: Needle optimisation in search means we can't just call solve_expression,
+                // we need to basically copy the code below...
                 _ => unreachable!(),
             };
             for expression in group {

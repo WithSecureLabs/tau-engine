@@ -368,14 +368,16 @@ pub fn shake(expression: Expression, rewrite: bool) -> Expression {
                 }
             }
         }
-        Expression::Match(Match::All, expression) => {
-            // NOTE: We have to be careful what we optimise here as we could really break the
-            // logic...
-            match *expression {
-                Expression::BooleanGroup(BoolSym::Or, expressions) => {
-                    Expression::BooleanGroup(BoolSym::And, expressions)
-                }
-                _ => Expression::Match(Match::All, expression),
+        Expression::Match(m, expression) => {
+            // FIXME: Due to some unreachable code in the solver we need to keep the group in for
+            // now...
+            let expression = shake(*expression, rewrite);
+            match expression {
+                Expression::BooleanGroup(_, _) => Expression::Match(m, Box::new(expression)),
+                _ => Expression::Match(
+                    m,
+                    Box::new(Expression::BooleanGroup(BoolSym::Or, vec![expression])),
+                ),
             }
         }
         Expression::Negate(expression) => match *expression {
@@ -446,7 +448,6 @@ pub fn shake(expression: Expression, rewrite: bool) -> Expression {
         | Expression::Float(_)
         | Expression::Identifier(_)
         | Expression::Integer(_)
-        | Expression::Match(_, _)
         | Expression::Null
         | Expression::Search(_, _, _) => expression,
     }
@@ -928,8 +929,13 @@ mod tests {
         );
         let shaken = shake(expression, false);
 
-        let expected =
-            Expression::BooleanGroup(BoolSym::And, vec![Expression::Null, Expression::Null]);
+        let expected = Expression::Match(
+            Match::All,
+            Box::new(Expression::BooleanGroup(
+                BoolSym::Or,
+                vec![Expression::Null, Expression::Null],
+            )),
+        );
 
         assert_eq!(shaken, expected);
     }
@@ -976,6 +982,50 @@ mod tests {
             Search::RegexSet(RegexSetBuilder::new(vec!["foo"]).build().unwrap(), false),
             "name".to_owned(),
             false,
+        );
+
+        assert_eq!(shaken, expected);
+    }
+
+    #[test]
+    fn rewrite_rule_0() {
+        // FIXME: For now due to complex searches, we force into a group...
+        let expression = Expression::BooleanExpression(
+            Box::new(Expression::BooleanExpression(
+                Box::new(Expression::Match(
+                    Match::All,
+                    Box::new(Expression::Search(
+                        Search::Exact("a".to_owned()),
+                        "a".to_owned(),
+                        false,
+                    )),
+                )),
+                BoolSym::Or,
+                Box::new(Expression::Null),
+            )),
+            BoolSym::And,
+            Box::new(Expression::Negate(Box::new(Expression::Null))),
+        );
+        let shaken = shake(expression, true);
+
+        let expected = Expression::BooleanExpression(
+            Box::new(Expression::BooleanExpression(
+                Box::new(Expression::Match(
+                    Match::All,
+                    Box::new(Expression::BooleanGroup(
+                        BoolSym::Or,
+                        vec![Expression::Search(
+                            Search::Exact("a".to_owned()),
+                            "a".to_owned(),
+                            false,
+                        )],
+                    )),
+                )),
+                BoolSym::Or,
+                Box::new(Expression::Null),
+            )),
+            BoolSym::And,
+            Box::new(Expression::Negate(Box::new(Expression::Null))),
         );
 
         assert_eq!(shaken, expected);
