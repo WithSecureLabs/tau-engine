@@ -628,7 +628,7 @@ mod tests {
             "ids".to_owned(),
             Box::new(Expression::Search(
                 Search::AhoCorasick(
-                    Box::new(AhoCorasickBuilder::new().dfa(false).build(vec![
+                    Box::new(AhoCorasickBuilder::new().dfa(true).build(vec![
                         "e2ec14cb-299e-4adf-bb09-04a6a8417bca",
                         "e2ec14cb-299e-4adf-bb09-04a6a8417bcb",
                         "e2ec14cb-299e-4adf-bb09-04a6a8417bcc",
@@ -658,7 +658,7 @@ mod tests {
                     Search::AhoCorasick(
                         Box::new(
                             AhoCorasickBuilder::new()
-                                .dfa(false)
+                                .dfa(true)
                                 .ascii_case_insensitive(false)
                                 .build(vec![
                                     "Quick".to_owned(),
@@ -680,8 +680,8 @@ mod tests {
                     Search::AhoCorasick(
                         Box::new(
                             AhoCorasickBuilder::new()
-                                .dfa(false)
-                                .ascii_case_insensitive(false)
+                                .dfa(true)
+                                .ascii_case_insensitive(true)
                                 .build(vec![
                                     "quick".to_owned(),
                                     "brown".to_owned(),
@@ -693,7 +693,7 @@ mod tests {
                             MatchType::Exact("brown".to_owned()),
                             MatchType::EndsWith("fox".to_owned()),
                         ],
-                        false,
+                        true,
                     ),
                     "name".to_owned(),
                     false,
@@ -719,10 +719,10 @@ mod tests {
                 Expression::Search(
                     Search::Regex(
                         RegexBuilder::new("bar")
-                            .case_insensitive(false)
+                            .case_insensitive(true)
                             .build()
                             .unwrap(),
-                        false,
+                        true,
                     ),
                     "name".to_owned(),
                     false,
@@ -741,10 +741,10 @@ mod tests {
                 Expression::Search(
                     Search::RegexSet(
                         RegexSetBuilder::new(vec!["ipsum"])
-                            .case_insensitive(false)
+                            .case_insensitive(true)
                             .build()
                             .unwrap(),
-                        false,
+                        true,
                     ),
                     "name".to_owned(),
                     false,
@@ -779,7 +779,7 @@ mod tests {
                     Search::AhoCorasick(
                         Box::new(
                             AhoCorasickBuilder::new()
-                                .dfa(false)
+                                .dfa(true)
                                 .ascii_case_insensitive(false)
                                 .build(vec![
                                     "Quick".to_owned(),
@@ -809,8 +809,8 @@ mod tests {
                     Search::AhoCorasick(
                         Box::new(
                             AhoCorasickBuilder::new()
-                                .dfa(false)
-                                .ascii_case_insensitive(false)
+                                .dfa(true)
+                                .ascii_case_insensitive(true)
                                 .build(vec![
                                     "quick".to_owned(),
                                     "brown".to_owned(),
@@ -822,7 +822,7 @@ mod tests {
                             MatchType::Exact("brown".to_owned()),
                             MatchType::EndsWith("fox".to_owned()),
                         ],
-                        false,
+                        true,
                     ),
                     "name".to_owned(),
                     false,
@@ -830,10 +830,10 @@ mod tests {
                 Expression::Search(
                     Search::RegexSet(
                         RegexSetBuilder::new(vec!["bar", "ipsum"])
-                            .case_insensitive(false)
+                            .case_insensitive(true)
                             .build()
                             .unwrap(),
-                        false,
+                        true,
                     ),
                     "name".to_owned(),
                     false,
@@ -897,7 +897,7 @@ mod tests {
             "ids".to_owned(),
             Box::new(Expression::Search(
                 Search::AhoCorasick(
-                    Box::new(AhoCorasickBuilder::new().dfa(false).build(vec![
+                    Box::new(AhoCorasickBuilder::new().dfa(true).build(vec![
                         "e2ec14cb-299e-4adf-bb09-04a6a8417bca",
                         "e2ec14cb-299e-4adf-bb09-04a6a8417bcb",
                         "e2ec14cb-299e-4adf-bb09-04a6a8417bcc",

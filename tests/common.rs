@@ -23,5 +23,9 @@ pub fn load_shaken_rule(name: &str) -> Result<Rule, Error> {
     };
     let root = env!("CARGO_MANIFEST_DIR");
     let path = Path::new(root).join("tests/rules").join(rule);
-    Rule::loader().shake(true).load(&path)
+    Rule::loader()
+        //.coalesce(true)
+        //.rewrite(true)
+        .shake(true)
+        .load(&path)
 }

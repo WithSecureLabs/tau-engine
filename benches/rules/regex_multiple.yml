@@ -2,15 +2,15 @@
 detection:
   A:
     phrase:
-      - ?.*the.*
-      - ?.*quick.*
-      - ?.*brown.*
-      - ?.*fox.*
-      - ?.*jumps.*
-      - ?.*over.*
-      - ?.*the.*
-      - ?.*lazy.*
-      - ?.*dog.*
+      - ?(^|.*\s+)the(\s+.*|$)
+      - ?(^|.*\s+)quick(\s+.*|$)
+      - ?(^|.*\s+)brown(\s+.*|$)
+      - ?(^|.*\s+)fox(\s+.*|$)
+      - ?(^|.*\s+)jumps(\s+.*|$)
+      - ?(^|.*\s+)over(\s+.*|$)
+      - ?(^|.*\s+)the(\s+.*|$)
+      - ?(^|.*\s+)lazy(\s+.*|$)
+      - ?(^|.*\s+)dog(\s+.*|$)
   condition: A
 true_positives:
   - phrase: all dog
