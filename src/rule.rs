@@ -152,6 +152,8 @@ impl<'de> Deserialize<'de> for Detection {
     }
 }
 
+// TODO: Should probably just remove this and have an optimise on the Rule where we parse optimise
+// options...
 /// A `RuleLoader` can be used to create a `Rule` with custom configuration.
 pub struct RuleLoader {
     coalesce: bool,
@@ -182,8 +184,34 @@ impl RuleLoader {
     }
 
     /// Loads the rule from a YAML string using the configuration set on the loader.
-    pub fn from_str(self, rule: &str) -> crate::Result<Rule> {
-        let rule: Rule = serde_yaml::from_str(rule).map_err(crate::error::rule_invalid)?;
+    pub fn from_str(self, s: &str) -> crate::Result<Rule> {
+        let rule: Rule = serde_yaml::from_str(s).map_err(crate::error::rule_invalid)?;
+        // FIXME: If we debug with these there will be confusion, as the raw values will be
+        // incorrect.
+        let mut detection = rule.detection;
+        if self.coalesce {
+            detection.expression =
+                optimiser::coalesce(detection.expression, &detection.identifiers);
+            detection.identifiers.clear();
+        }
+        if self.shake {
+            detection.expression = optimiser::shake(detection.expression, self.rewrite);
+            detection.identifiers = detection
+                .identifiers
+                .into_iter()
+                .map(|(k, v)| (k, optimiser::shake(v, self.rewrite)))
+                .collect();
+        }
+        Ok(Rule {
+            detection,
+            true_negatives: rule.true_negatives,
+            true_positives: rule.true_positives,
+        })
+    }
+
+    /// Loads the rule from a YAML string using the configuration set on the loader.
+    pub fn from_value(self, value: serde_yaml::Value) -> crate::Result<Rule> {
+        let rule: Rule = serde_yaml::from_value(value).map_err(crate::error::rule_invalid)?;
         // FIXME: If we debug with these there will be confusion, as the raw values will be
         // incorrect.
         let mut detection = rule.detection;
@@ -557,8 +585,13 @@ impl Rule {
     }
 
     /// Load a rule from a YAML string.
-    pub fn from_str(rule: &str) -> crate::Result<Self> {
-        RuleLoader::new().from_str(rule)
+    pub fn from_str(s: &str) -> crate::Result<Self> {
+        RuleLoader::new().from_str(s)
+    }
+
+    /// Load a rule from a YAML Value.
+    pub fn from_value(value: serde_yaml::Value) -> crate::Result<Self> {
+        RuleLoader::new().from_value(value)
     }
 
     /// Allow Tau to optimise the rule when loaded.
