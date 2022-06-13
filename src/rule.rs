@@ -561,6 +561,27 @@ impl Rule {
         RuleLoader::new().from_str(rule)
     }
 
+    /// Allow Tau to optimise the rule when loaded.
+    ///
+    /// # Options
+    /// - coalesce: tau will caalesce the identifier's expressions into the condition.
+    /// - rewrite: tau will try to rewrite inefficient string searches.
+    pub fn optimise(mut self, coalesce: bool, rewrite: bool) -> Self {
+        if coalesce {
+            self.detection.expression =
+                optimiser::coalesce(self.detection.expression, &self.detection.identifiers);
+            self.detection.identifiers.clear();
+        }
+        self.detection.expression = optimiser::shake(self.detection.expression, rewrite);
+        self.detection.identifiers = self
+            .detection
+            .identifiers
+            .into_iter()
+            .map(|(k, v)| (k, optimiser::shake(v, rewrite)))
+            .collect();
+        self
+    }
+
     /// Evaluates the rule against the provided `Document`, returning true if it has matched.
     #[inline]
     pub fn matches(&self, document: &dyn Document) -> bool {
