@@ -166,7 +166,7 @@ impl Default for RuleLoader {
         Self {
             coalesce: false,
             rewrite: false,
-            shake: true,
+            shake: false,
         }
     }
 }
@@ -256,7 +256,7 @@ impl RuleLoader {
 
     /// Allow Tau to optimise the rule when loaded.
     ///
-    /// This option is enabled by default.
+    /// This option is disabled by default.
     pub fn shake(mut self, yes: bool) -> Self {
         self.shake = yes;
         self
