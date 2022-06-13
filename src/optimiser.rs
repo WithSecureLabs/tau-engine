@@ -380,13 +380,17 @@ pub fn shake(expression: Expression, rewrite: bool) -> Expression {
                 ),
             }
         }
-        Expression::Negate(expression) => match *expression {
-            Expression::BooleanGroup(BoolSym::Or, _) => {
-                shake(Expression::Match(Match::Of(0), expression), rewrite)
+        Expression::Negate(expression) => {
+            let expression = shake(*expression, rewrite);
+            match expression {
+                Expression::BooleanGroup(BoolSym::Or, _) => shake(
+                    Expression::Match(Match::Of(0), Box::new(expression)),
+                    rewrite,
+                ),
+                Expression::Negate(inner) => shake(*inner, rewrite),
+                _ => Expression::Negate(Box::new(expression)),
             }
-            Expression::Negate(inner) => shake(*inner, rewrite),
-            _ => Expression::Negate(Box::new(shake(*expression, rewrite))),
-        },
+        }
         Expression::Nested(field, expression) => {
             Expression::Nested(field, Box::new(shake(*expression, rewrite)))
         }
@@ -1027,6 +1031,32 @@ mod tests {
             BoolSym::And,
             Box::new(Expression::Negate(Box::new(Expression::Null))),
         );
+
+        assert_eq!(shaken, expected);
+    }
+
+    #[test]
+    fn rewrite_rule_edge_0() {
+        // FIXME: For now due to complex searches, we force into a group...
+        let expression = Expression::Negate(Box::new(Expression::BooleanGroup(
+            BoolSym::Or,
+            vec![Expression::BooleanGroup(
+                BoolSym::And,
+                vec![
+                    Expression::Search(Search::Exact("a".to_owned()), "a".to_owned(), false),
+                    Expression::Search(Search::Exact("b".to_owned()), "b".to_owned(), false),
+                ],
+            )],
+        )));
+        let shaken = shake(expression, true);
+
+        let expected = Expression::Negate(Box::new(Expression::BooleanGroup(
+            BoolSym::And,
+            vec![
+                Expression::Search(Search::Exact("a".to_owned()), "a".to_owned(), false),
+                Expression::Search(Search::Exact("b".to_owned()), "b".to_owned(), false),
+            ],
+        )));
 
         assert_eq!(shaken, expected);
     }
