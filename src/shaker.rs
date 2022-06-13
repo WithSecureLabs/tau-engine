@@ -263,13 +263,27 @@ pub fn shake(expression: Expression) -> Expression {
                     scratch.extend(contains);
                     aho.sort_by(|x, y| match (x, y) {
                         (
-                            Expression::Search(Search::AhoCorasick(_, a, _), _, _),
-                            Expression::Search(Search::AhoCorasick(_, b, _), _, _),
-                        ) => b.len().cmp(&a.len()),
+                            Expression::Search(Search::AhoCorasick(_, a, case0), _, _),
+                            Expression::Search(Search::AhoCorasick(_, b, case1), _, _),
+                        ) => (b.len(), case1).cmp(&(a.len(), case0)),
                         _ => std::cmp::Ordering::Equal,
                     });
                     scratch.extend(aho);
+                    regex.sort_by(|x, y| match (x, y) {
+                        (
+                            Expression::Search(Search::Regex(reg0, case0), _, _),
+                            Expression::Search(Search::Regex(reg1, case1), _, _),
+                        ) => (reg0.as_str(), case0).cmp(&(reg1.as_str(), case1)),
+                        _ => std::cmp::Ordering::Equal,
+                    });
                     scratch.extend(regex);
+                    regex_set.sort_by(|x, y| match (x, y) {
+                        (
+                            Expression::Search(Search::RegexSet(set0, case0), _, _),
+                            Expression::Search(Search::RegexSet(set1, case1), _, _),
+                        ) => (set0.patterns(), case0).cmp(&(set1.patterns(), case1)),
+                        _ => std::cmp::Ordering::Equal,
+                    });
                     scratch.extend(regex_set);
                     scratch.extend(rest);
                     scratch
@@ -338,10 +352,8 @@ pub fn shake(expression: Expression) -> Expression {
                     shake(Expression::BooleanGroup(BoolSym::Or, vec![x, *y, *z]))
                 }
                 (Expression::Negate(left), BoolSym::And, Expression::Negate(right)) => {
-                    shake(Expression::Negate(Box::new(Expression::BooleanExpression(
-                        left,
-                        BoolSym::Or,
-                        right,
+                    shake(Expression::Negate(Box::new(shake(
+                        Expression::BooleanExpression(left, BoolSym::Or, right),
                     ))))
                 }
                 (left, _, right) => {
@@ -384,6 +396,141 @@ pub fn shake(expression: Expression) -> Expression {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn coalesce_basic() {
+        let mut identifiers = HashMap::new();
+        identifiers.insert(
+            "A".to_owned(),
+            Expression::BooleanExpression(
+                Box::new(Expression::Field("count".to_owned())),
+                BoolSym::Equal,
+                Box::new(Expression::Integer(1)),
+            ),
+        );
+        let expression = Expression::Identifier("A".to_owned());
+
+        let coalesced = coalesce(expression, &identifiers);
+
+        let expected = Expression::BooleanExpression(
+            Box::new(Expression::Field("count".to_owned())),
+            BoolSym::Equal,
+            Box::new(Expression::Integer(1)),
+        );
+
+        assert_eq!(coalesced, expected);
+    }
+
+    #[test]
+    fn shake_and_nots() {
+        let expression = Expression::BooleanExpression(
+            Box::new(Expression::Negate(Box::new(Expression::Null))),
+            BoolSym::And,
+            Box::new(Expression::Negate(Box::new(Expression::Null))),
+        );
+        let shaken = shake(expression);
+
+        let expected = Expression::Negate(Box::new(Expression::BooleanExpression(
+            Box::new(Expression::Null),
+            BoolSym::Or,
+            Box::new(Expression::Null),
+        )));
+
+        assert_eq!(shaken, expected);
+
+        let expression = Expression::BooleanExpression(
+            Box::new(Expression::Negate(Box::new(Expression::Null))),
+            BoolSym::And,
+            Box::new(Expression::BooleanExpression(
+                Box::new(Expression::Negate(Box::new(Expression::Null))),
+                BoolSym::And,
+                Box::new(Expression::Negate(Box::new(Expression::Null))),
+            )),
+        );
+        let shaken = shake(expression);
+
+        let expected = Expression::Match(
+            Match::Of(0),
+            Box::new(Expression::BooleanGroup(
+                BoolSym::Or,
+                vec![Expression::Null, Expression::Null, Expression::Null],
+            )),
+        );
+
+        assert_eq!(shaken, expected);
+    }
+
+    #[test]
+    fn shake_ands() {
+        let expression = Expression::BooleanExpression(
+            Box::new(Expression::Null),
+            BoolSym::And,
+            Box::new(Expression::Null),
+        );
+        let shaken = shake(expression);
+
+        let expected = Expression::BooleanExpression(
+            Box::new(Expression::Null),
+            BoolSym::And,
+            Box::new(Expression::Null),
+        );
+
+        assert_eq!(shaken, expected);
+
+        let expression = Expression::BooleanExpression(
+            Box::new(Expression::Null),
+            BoolSym::And,
+            Box::new(Expression::BooleanExpression(
+                Box::new(Expression::Null),
+                BoolSym::And,
+                Box::new(Expression::Null),
+            )),
+        );
+        let shaken = shake(expression);
+
+        let expected = Expression::BooleanGroup(
+            BoolSym::And,
+            vec![Expression::Null, Expression::Null, Expression::Null],
+        );
+
+        assert_eq!(shaken, expected);
+    }
+
+    #[test]
+    fn shake_ors() {
+        let expression = Expression::BooleanExpression(
+            Box::new(Expression::Null),
+            BoolSym::Or,
+            Box::new(Expression::Null),
+        );
+        let shaken = shake(expression);
+
+        let expected = Expression::BooleanExpression(
+            Box::new(Expression::Null),
+            BoolSym::Or,
+            Box::new(Expression::Null),
+        );
+
+        assert_eq!(shaken, expected);
+
+        let expression = Expression::BooleanExpression(
+            Box::new(Expression::Null),
+            BoolSym::Or,
+            Box::new(Expression::BooleanExpression(
+                Box::new(Expression::Null),
+                BoolSym::Or,
+                Box::new(Expression::Null),
+            )),
+        );
+        let shaken = shake(expression);
+
+        let expected = Expression::BooleanGroup(
+            BoolSym::Or,
+            vec![Expression::Null, Expression::Null, Expression::Null],
+        );
+
+        assert_eq!(shaken, expected);
+    }
 
     #[test]
     fn shake_group_of_nested() {
@@ -443,6 +590,224 @@ mod tests {
     }
 
     #[test]
+    fn shake_group_or() {
+        // NOTE: This is not a solvable expression but tests what we need testing
+        let expression = Expression::BooleanGroup(
+            BoolSym::Or,
+            vec![
+                Expression::Search(
+                    Search::AhoCorasick(
+                        Box::new(
+                            AhoCorasickBuilder::new()
+                                .dfa(true)
+                                .ascii_case_insensitive(false)
+                                .build(vec![
+                                    "Quick".to_owned(),
+                                    "Brown".to_owned(),
+                                    "Fox".to_owned(),
+                                ]),
+                        ),
+                        vec![
+                            MatchType::Contains("Quick".to_owned()),
+                            MatchType::Exact("Brown".to_owned()),
+                            MatchType::EndsWith("Fox".to_owned()),
+                        ],
+                        false,
+                    ),
+                    "name".to_owned(),
+                    false,
+                ),
+                Expression::Search(
+                    Search::AhoCorasick(
+                        Box::new(
+                            AhoCorasickBuilder::new()
+                                .dfa(true)
+                                .ascii_case_insensitive(true)
+                                .build(vec![
+                                    "quick".to_owned(),
+                                    "brown".to_owned(),
+                                    "fox".to_owned(),
+                                ]),
+                        ),
+                        vec![
+                            MatchType::Contains("quick".to_owned()),
+                            MatchType::Exact("brown".to_owned()),
+                            MatchType::EndsWith("fox".to_owned()),
+                        ],
+                        true,
+                    ),
+                    "name".to_owned(),
+                    false,
+                ),
+                Expression::Search(Search::Any, "name".to_owned(), false),
+                Expression::Search(Search::Contains("afoo".to_owned()), "a".to_owned(), false),
+                Expression::Search(Search::Contains("foo".to_owned()), "name".to_owned(), false),
+                Expression::Search(Search::EndsWith("bbar".to_owned()), "b".to_owned(), false),
+                Expression::Search(Search::EndsWith("bar".to_owned()), "name".to_owned(), false),
+                Expression::Search(Search::Exact("cbaz".to_owned()), "c".to_owned(), false),
+                Expression::Search(Search::Exact("baz".to_owned()), "name".to_owned(), false),
+                Expression::Search(
+                    Search::Regex(
+                        RegexBuilder::new("foo")
+                            .case_insensitive(false)
+                            .build()
+                            .unwrap(),
+                        false,
+                    ),
+                    "name".to_owned(),
+                    false,
+                ),
+                Expression::Search(
+                    Search::Regex(
+                        RegexBuilder::new("bar")
+                            .case_insensitive(true)
+                            .build()
+                            .unwrap(),
+                        true,
+                    ),
+                    "name".to_owned(),
+                    false,
+                ),
+                Expression::Search(
+                    Search::RegexSet(
+                        RegexSetBuilder::new(vec!["lorem"])
+                            .case_insensitive(false)
+                            .build()
+                            .unwrap(),
+                        false,
+                    ),
+                    "name".to_owned(),
+                    false,
+                ),
+                Expression::Search(
+                    Search::RegexSet(
+                        RegexSetBuilder::new(vec!["ipsum"])
+                            .case_insensitive(true)
+                            .build()
+                            .unwrap(),
+                        true,
+                    ),
+                    "name".to_owned(),
+                    false,
+                ),
+                Expression::Search(
+                    Search::StartsWith("dfoobar".to_owned()),
+                    "d".to_owned(),
+                    false,
+                ),
+                Expression::Search(
+                    Search::StartsWith("foobar".to_owned()),
+                    "name".to_owned(),
+                    false,
+                ),
+            ],
+        );
+        let shaken = shake(expression);
+
+        let expected = Expression::BooleanGroup(
+            BoolSym::Or,
+            vec![
+                Expression::Search(Search::Any, "name".to_owned(), false),
+                Expression::Search(Search::Exact("cbaz".to_owned()), "c".to_owned(), false),
+                Expression::Search(
+                    Search::StartsWith("dfoobar".to_owned()),
+                    "d".to_owned(),
+                    false,
+                ),
+                Expression::Search(Search::EndsWith("bbar".to_owned()), "b".to_owned(), false),
+                Expression::Search(Search::Contains("afoo".to_owned()), "a".to_owned(), false),
+                Expression::Search(
+                    Search::AhoCorasick(
+                        Box::new(
+                            AhoCorasickBuilder::new()
+                                .dfa(true)
+                                .ascii_case_insensitive(false)
+                                .build(vec![
+                                    "Quick".to_owned(),
+                                    "Brown".to_owned(),
+                                    "Fox".to_owned(),
+                                    "foo".to_owned(),
+                                    "bar".to_owned(),
+                                    "baz".to_owned(),
+                                    "foobar".to_owned(),
+                                ]),
+                        ),
+                        vec![
+                            MatchType::Contains("Quick".to_owned()),
+                            MatchType::Exact("Brown".to_owned()),
+                            MatchType::EndsWith("Fox".to_owned()),
+                            MatchType::Contains("foo".to_owned()),
+                            MatchType::EndsWith("bar".to_owned()),
+                            MatchType::Exact("baz".to_owned()),
+                            MatchType::StartsWith("foobar".to_owned()),
+                        ],
+                        false,
+                    ),
+                    "name".to_owned(),
+                    false,
+                ),
+                Expression::Search(
+                    Search::AhoCorasick(
+                        Box::new(
+                            AhoCorasickBuilder::new()
+                                .dfa(true)
+                                .ascii_case_insensitive(true)
+                                .build(vec![
+                                    "quick".to_owned(),
+                                    "brown".to_owned(),
+                                    "fox".to_owned(),
+                                ]),
+                        ),
+                        vec![
+                            MatchType::Contains("quick".to_owned()),
+                            MatchType::Exact("brown".to_owned()),
+                            MatchType::EndsWith("fox".to_owned()),
+                        ],
+                        true,
+                    ),
+                    "name".to_owned(),
+                    false,
+                ),
+                Expression::Search(
+                    Search::RegexSet(
+                        RegexSetBuilder::new(vec!["bar", "ipsum"])
+                            .case_insensitive(true)
+                            .build()
+                            .unwrap(),
+                        true,
+                    ),
+                    "name".to_owned(),
+                    false,
+                ),
+                Expression::Search(
+                    Search::RegexSet(
+                        RegexSetBuilder::new(vec!["foo", "lorem"])
+                            .case_insensitive(false)
+                            .build()
+                            .unwrap(),
+                        false,
+                    ),
+                    "name".to_owned(),
+                    false,
+                ),
+            ],
+        );
+
+        assert_eq!(shaken, expected);
+    }
+
+    #[test]
+    fn shake_group_or_1() {
+        // NOTE: This is not a solvable expression but tests what we need testing
+        let expression = Expression::BooleanGroup(BoolSym::Or, vec![Expression::Null]);
+        let shaken = shake(expression);
+
+        let expected = Expression::Null;
+
+        assert_eq!(shaken, expected);
+    }
+
+    #[test]
     fn shake_nested() {
         let expression = Expression::Nested(
             "ids".to_owned(),
@@ -489,6 +854,34 @@ mod tests {
                 false,
             )),
         );
+
+        assert_eq!(shaken, expected);
+    }
+
+    #[test]
+    fn shake_match() {
+        let expression = Expression::Match(
+            Match::All,
+            Box::new(Expression::BooleanGroup(
+                BoolSym::Or,
+                vec![Expression::Null, Expression::Null],
+            )),
+        );
+        let shaken = shake(expression);
+
+        let expected =
+            Expression::BooleanGroup(BoolSym::And, vec![Expression::Null, Expression::Null]);
+
+        assert_eq!(shaken, expected);
+    }
+
+    #[test]
+    fn shake_negate() {
+        let expression =
+            Expression::Negate(Box::new(Expression::Negate(Box::new(Expression::Null))));
+        let shaken = shake(expression);
+
+        let expected = Expression::Null;
 
         assert_eq!(shaken, expected);
     }

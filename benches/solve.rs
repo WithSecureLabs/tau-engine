@@ -173,4 +173,5 @@ bench_test!("search_starts_with");
 bench_rule!("complex");
 bench_rule!("contains_multiple");
 bench_rule!("regex_multiple");
+bench_rule!("searches");
 bench_rule!("simple");
