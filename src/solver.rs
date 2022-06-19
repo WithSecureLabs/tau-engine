@@ -10,6 +10,15 @@ use crate::rule::Detection;
 use crate::tokeniser::{BoolSym, ModSym};
 use crate::value::Value;
 
+struct Cache<'a>(&'a Vec<Option<Value<'a>>>);
+
+impl<'a> Document for Cache<'a> {
+    fn find(&self, key: &str) -> Option<Value> {
+        let i = key.chars().nth(0).expect("could not get key") as u32;
+        self.0[i as usize].clone()
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub(crate) enum SolverResult {
     True,
@@ -707,6 +716,57 @@ pub(crate) fn solve_expression(
                         SolverResult::False => res = SolverResult::False,
                         SolverResult::Missing => {}
                     }
+                }
+            }
+            res
+        }
+        Expression::Matrix(ref columns, ref rows) => {
+            // NOTE: Field and search widths must be the same or tau will panic, for now this is
+            // fine as only the optimiser can write this expression, and for those using core it is
+            // on them to ensure they don't break this. There are ways to lock this down and it
+            // could be done in the future...
+            let size = columns.len();
+            let mut cache: Vec<Option<Value>> = Vec::with_capacity(size);
+            for _ in 0..size {
+                cache.push(None);
+            }
+
+            let mut res = SolverResult::Missing;
+            for row in rows {
+                let mut hit = SolverResult::True;
+                for (i, expression) in row.iter().enumerate() {
+                    if let Some(expression) = expression {
+                        if cache[i].is_none() {
+                            let value = match document.find(&columns[i]) {
+                                Some(v) => v,
+                                None => {
+                                    debug!(
+                                        "evaluating missing, field not found for {}",
+                                        expression
+                                    );
+                                    hit = SolverResult::Missing;
+                                    break;
+                                }
+                            };
+                            let _ = std::mem::replace(&mut cache[i], Some(value));
+                        }
+                        match solve_expression(expression, identifiers, &Cache(&cache)) {
+                            SolverResult::True => {}
+                            SolverResult::False => {
+                                hit = SolverResult::False;
+                                break;
+                            }
+                            SolverResult::Missing => {
+                                hit = SolverResult::Missing;
+                                break;
+                            }
+                        }
+                    }
+                }
+                match hit {
+                    SolverResult::True => return SolverResult::True,
+                    SolverResult::False => res = SolverResult::False,
+                    SolverResult::Missing => {}
                 }
             }
             res

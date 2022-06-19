@@ -33,9 +33,8 @@ macro_rules! bench_rule {
             #[bench]
             fn [< bench_ $rule _true_positive >] (b: &mut Bencher) {
                 let rule = common::load_rule("benches", $rule);
-                assert_eq!(rule.validate().unwrap(), true);
-
                 print_rule(&rule);
+                assert_eq!(rule.validate().unwrap(), true);
 
                 let document = rule.true_positives[0].as_mapping().unwrap();
                 b.iter(|| tau_engine::solve(&rule.detection, document))
@@ -43,11 +42,10 @@ macro_rules! bench_rule {
 
             #[cfg(feature = "benchmarks")]
             #[bench]
-            fn [< bench_ $rule _true_positive_shaken >] (b: &mut Bencher) {
-                let rule = common::load_shaken_rule("benches", $rule);
-                assert_eq!(rule.validate().unwrap(), true);
-
+            fn [< bench_ $rule _true_positive_optimised >] (b: &mut Bencher) {
+                let rule = common::load_optimised_rule("benches", $rule);
                 print_rule(&rule);
+                assert_eq!(rule.validate().unwrap(), true);
 
                 let document = rule.true_positives[0].as_mapping().unwrap();
                 b.iter(|| tau_engine::solve(&rule.detection, document))
@@ -57,9 +55,8 @@ macro_rules! bench_rule {
             #[bench]
             fn [< bench_ $rule _true_negative>] (b: &mut Bencher) {
                 let rule = common::load_rule("benches", $rule);
-                assert_eq!(rule.validate().unwrap(), true);
-
                 print_rule(&rule);
+                assert_eq!(rule.validate().unwrap(), true);
 
                 let document = rule.true_negatives[0].as_mapping().unwrap();
                 b.iter(|| tau_engine::solve(&rule.detection, document))
@@ -67,11 +64,10 @@ macro_rules! bench_rule {
 
             #[cfg(feature = "benchmarks")]
             #[bench]
-            fn [< bench_ $rule _true_negative_shaken>] (b: &mut Bencher) {
-                let rule = common::load_shaken_rule("benches", $rule);
-                assert_eq!(rule.validate().unwrap(), true);
-
+            fn [< bench_ $rule _true_negative_optimised>] (b: &mut Bencher) {
+                let rule = common::load_optimised_rule("benches", $rule);
                 print_rule(&rule);
+                assert_eq!(rule.validate().unwrap(), true);
 
                 let document = rule.true_negatives[0].as_mapping().unwrap();
                 b.iter(|| tau_engine::solve(&rule.detection, document))
@@ -87,9 +83,8 @@ macro_rules! bench_test {
             #[bench]
             fn [< bench_ $rule _true_positive >] (b: &mut Bencher) {
                 let rule = common::load_rule("tests", $rule);
-                assert_eq!(rule.validate().unwrap(), true);
-
                 print_rule(&rule);
+                assert_eq!(rule.validate().unwrap(), true);
 
                 let document = rule.true_positives[0].as_mapping().unwrap();
                 b.iter(|| tau_engine::solve(&rule.detection, document))
@@ -97,11 +92,10 @@ macro_rules! bench_test {
 
             #[cfg(feature = "benchmarks")]
             #[bench]
-            fn [< bench_ $rule _true_positive_shaken >] (b: &mut Bencher) {
-                let rule = common::load_shaken_rule("tests", $rule);
-                assert_eq!(rule.validate().unwrap(), true);
-
+            fn [< bench_ $rule _true_positive_optimised >] (b: &mut Bencher) {
+                let rule = common::load_optimised_rule("tests", $rule);
                 print_rule(&rule);
+                assert_eq!(rule.validate().unwrap(), true);
 
                 let document = rule.true_positives[0].as_mapping().unwrap();
                 b.iter(|| tau_engine::solve(&rule.detection, document))
@@ -111,9 +105,8 @@ macro_rules! bench_test {
             #[bench]
             fn [< bench_ $rule _true_negative>] (b: &mut Bencher) {
                 let rule = common::load_rule("tests", $rule);
-                assert_eq!(rule.validate().unwrap(), true);
-
                 print_rule(&rule);
+                assert_eq!(rule.validate().unwrap(), true);
 
                 let document = rule.true_negatives[0].as_mapping().unwrap();
                 b.iter(|| tau_engine::solve(&rule.detection, document))
@@ -121,11 +114,10 @@ macro_rules! bench_test {
 
             #[cfg(feature = "benchmarks")]
             #[bench]
-            fn [< bench_ $rule _true_negative_shaken>] (b: &mut Bencher) {
-                let rule = common::load_shaken_rule("tests", $rule);
-                assert_eq!(rule.validate().unwrap(), true);
-
+            fn [< bench_ $rule _true_negative_optimised>] (b: &mut Bencher) {
+                let rule = common::load_optimised_rule("tests", $rule);
                 print_rule(&rule);
+                assert_eq!(rule.validate().unwrap(), true);
 
                 let document = rule.true_negatives[0].as_mapping().unwrap();
                 b.iter(|| tau_engine::solve(&rule.detection, document))
@@ -175,3 +167,4 @@ bench_rule!("contains_multiple");
 bench_rule!("regex_multiple");
 bench_rule!("searches");
 bench_rule!("simple");
+bench_rule!("slow");

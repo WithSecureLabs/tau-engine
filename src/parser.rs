@@ -96,6 +96,7 @@ pub enum Expression {
     Identifier(String),
     Integer(i64),
     Match(Match, Box<Expression>),
+    Matrix(Vec<String>, Vec<Vec<Option<Expression>>>),
     Negate(Box<Expression>),
     Nested(String, Box<Expression>),
     Null,
@@ -124,6 +125,24 @@ impl fmt::Display for Expression {
                 write!(f, "all({})", e)
             }
             Self::Match(Match::Of(i), e) => write!(f, "of({}, {})", e, i),
+            Self::Matrix(c, m) => write!(
+                f,
+                "matrix([{}], [{}])",
+                c.iter()
+                    .map(|f| f.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", "),
+                m.iter()
+                    .map(|c| format!(
+                        "[{}]",
+                        c.iter()
+                            .map(|e| e.as_ref().map(|s| s.to_string()).unwrap_or("".to_owned()))
+                            .collect::<Vec<String>>()
+                            .join(", ")
+                    ))
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
             Self::Negate(e) => write!(f, "negate({})", e),
             Self::Nested(s, e) => write!(f, "nested({}, {})", s, e),
             Self::Null => write!(f, "null"),
@@ -145,6 +164,7 @@ impl Expression {
             | Self::BooleanExpression(_, _, _)
             | Self::Identifier(_)
             | Self::Match(_, _)
+            | Self::Matrix(_, _)
             | Self::Negate(_)
             | Self::Nested(_, _) => true,
         }

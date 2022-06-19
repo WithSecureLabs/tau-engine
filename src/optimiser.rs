@@ -38,6 +38,319 @@ pub fn coalesce(expression: Expression, identifiers: &HashMap<String, Expression
         | Expression::Field(_)
         | Expression::Float(_)
         | Expression::Integer(_)
+        | Expression::Matrix(_, _)
+        | Expression::Null
+        | Expression::Search(_, _, _) => expression,
+    }
+}
+
+pub fn matrix(expression: Expression) -> Expression {
+    match expression {
+        Expression::BooleanGroup(BoolSym::And, expressions) => {
+            let mut scratch = vec![];
+            for expression in expressions {
+                scratch.push(matrix(expression));
+            }
+            Expression::BooleanGroup(BoolSym::And, scratch)
+        }
+        Expression::BooleanGroup(BoolSym::Or, expressions) => {
+            // TODO: Clean this logic
+            let mut scratch = vec![];
+            for expression in expressions {
+                scratch.push(matrix(expression));
+            }
+
+            let mut fields: HashMap<String, u32> = HashMap::new();
+            for expression in &scratch {
+                match expression {
+                    Expression::BooleanGroup(BoolSym::And, ref expressions) => {
+                        let mut valid = true;
+                        for expression in expressions {
+                            match expression {
+                                Expression::BooleanExpression(left, _, right) => {
+                                    match (&**left, &**right) {
+                                        (Expression::Cast(_, _), Expression::Boolean(_))
+                                        | (Expression::Cast(_, _), Expression::Float(_))
+                                        | (Expression::Cast(_, _), Expression::Integer(_))
+                                        | (Expression::Cast(_, _), Expression::Null)
+                                        | (Expression::Field(_), Expression::Boolean(_))
+                                        | (Expression::Field(_), Expression::Float(_))
+                                        | (Expression::Field(_), Expression::Integer(_))
+                                        | (Expression::Field(_), Expression::Null) => {}
+                                        (_, _) => {
+                                            valid = false;
+                                            break;
+                                        }
+                                    }
+                                }
+                                Expression::Nested(_, _) | Expression::Search(_, _, _) => {}
+                                _ => {
+                                    valid = false;
+                                    break;
+                                }
+                            }
+                        }
+                        if valid {
+                            for expression in expressions {
+                                match expression {
+                                    Expression::Nested(field, _)
+                                    | Expression::Search(_, field, _) => {
+                                        let count = fields.entry(field.clone()).or_insert(0);
+                                        *count += 1;
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                    Expression::BooleanExpression(left, _, _) => match **left {
+                        Expression::Cast(ref field, _) | Expression::Field(ref field) => {
+                            let count = fields.entry(field.clone()).or_insert(0);
+                            *count += 1;
+                        }
+                        _ => {}
+                    },
+                    Expression::Nested(ref field, _) | Expression::Search(_, ref field, _) => {
+                        let count = fields.entry(field.clone()).or_insert(0);
+                        *count += 1;
+                    }
+                    _ => {}
+                }
+            }
+
+            let mut matrix = false;
+            for (_, count) in &fields {
+                if *count > 1 && *count < 256 {
+                    matrix = true;
+                }
+            }
+
+            if matrix {
+                let mut columns: Vec<(String, u32)> =
+                    fields.into_iter().map(|(k, v)| (k, v)).collect();
+                columns.sort_by(|x, y| x.1.cmp(&y.1));
+                let columns: Vec<String> = columns.into_iter().map(|(c, _)| c).collect();
+                let mut rows = vec![];
+                let mut rest = vec![];
+                for expression in scratch {
+                    match expression {
+                        Expression::BooleanGroup(BoolSym::And, expressions) => {
+                            let mut lookup = HashMap::new();
+                            let mut valid = true;
+                            for expression in &expressions {
+                                match expression {
+                                    Expression::BooleanExpression(left, _, _) => match **left {
+                                        Expression::Cast(ref field, _)
+                                        | Expression::Field(ref field) => {
+                                            if lookup.contains_key(field) {
+                                                valid = false;
+                                                break;
+                                            }
+                                            lookup.insert(field.clone(), expression.clone());
+                                        }
+                                        _ => {}
+                                    },
+                                    Expression::Nested(ref field, _)
+                                    | Expression::Search(_, ref field, _) => {
+                                        if lookup.contains_key(field) {
+                                            valid = false;
+                                            break;
+                                        }
+                                        lookup.insert(field.clone(), expression.clone());
+                                    }
+                                    _ => {
+                                        valid = false;
+                                        break;
+                                    }
+                                }
+                            }
+                            if valid {
+                                let mut row = vec![];
+                                for (i, column) in columns.iter().enumerate() {
+                                    if let Some(expression) = lookup.remove(column) {
+                                        let key = std::char::from_u32(i as u32)
+                                            .expect("could not make key");
+                                        match expression {
+                                            Expression::BooleanExpression(left, symbol, right) => {
+                                                match *left {
+                                                    Expression::Cast(_, kind) => {
+                                                        row.push(Some(
+                                                            Expression::BooleanExpression(
+                                                                Box::new(Expression::Cast(
+                                                                    key.to_string(),
+                                                                    kind.clone(),
+                                                                )),
+                                                                symbol,
+                                                                right.clone(),
+                                                            ),
+                                                        ));
+                                                    }
+                                                    Expression::Field(_) => {
+                                                        row.push(Some(
+                                                            Expression::BooleanExpression(
+                                                                Box::new(Expression::Field(
+                                                                    key.to_string(),
+                                                                )),
+                                                                symbol,
+                                                                right.clone(),
+                                                            ),
+                                                        ));
+                                                    }
+                                                    _ => {}
+                                                }
+                                            }
+                                            Expression::Nested(_, expression) => {
+                                                row.push(Some(Expression::Nested(
+                                                    key.to_string(),
+                                                    expression,
+                                                )));
+                                            }
+                                            Expression::Search(search, _, cast) => {
+                                                row.push(Some(Expression::Search(
+                                                    search,
+                                                    key.to_string(),
+                                                    cast,
+                                                )));
+                                            }
+                                            _ => {}
+                                        }
+                                    } else {
+                                        row.push(None);
+                                    }
+                                }
+                                rows.push(row);
+                            } else {
+                                rest.push(Expression::BooleanGroup(BoolSym::And, expressions));
+                            }
+                        }
+                        Expression::BooleanExpression(left, symbol, right) => {
+                            match (*left, &*right) {
+                                (Expression::Cast(field, kind), Expression::Boolean(_))
+                                | (Expression::Cast(field, kind), Expression::Float(_))
+                                | (Expression::Cast(field, kind), Expression::Integer(_))
+                                | (Expression::Cast(field, kind), Expression::Null) => {
+                                    let mut row = vec![];
+                                    for (i, column) in columns.iter().enumerate() {
+                                        if column == &field {
+                                            let key = std::char::from_u32(i as u32)
+                                                .expect("could not make key");
+                                            row.push(Some(Expression::BooleanExpression(
+                                                Box::new(Expression::Cast(
+                                                    key.to_string(),
+                                                    kind.clone(),
+                                                )),
+                                                symbol,
+                                                right.clone(),
+                                            )));
+                                        } else {
+                                            row.push(None);
+                                        }
+                                    }
+                                    rows.push(row);
+                                }
+                                (Expression::Field(field), Expression::Boolean(_))
+                                | (Expression::Field(field), Expression::Float(_))
+                                | (Expression::Field(field), Expression::Integer(_))
+                                | (Expression::Field(field), Expression::Null) => {
+                                    let mut row = vec![];
+                                    for (i, column) in columns.iter().enumerate() {
+                                        if column == &field {
+                                            let key = std::char::from_u32(i as u32)
+                                                .expect("could not make key");
+                                            row.push(Some(Expression::BooleanExpression(
+                                                Box::new(Expression::Field(key.to_string())),
+                                                symbol,
+                                                right.clone(),
+                                            )));
+                                        } else {
+                                            row.push(None);
+                                        }
+                                    }
+                                    rows.push(row);
+                                }
+                                (left, _) => {
+                                    rest.push(Expression::BooleanExpression(
+                                        Box::new(left),
+                                        symbol,
+                                        right,
+                                    ));
+                                }
+                            }
+                        }
+                        Expression::Nested(field, expression) => {
+                            let mut row = vec![];
+                            for (i, column) in columns.iter().enumerate() {
+                                if column == &field {
+                                    let key =
+                                        std::char::from_u32(i as u32).expect("could not make key");
+                                    row.push(Some(Expression::Nested(
+                                        key.to_string(),
+                                        expression.clone(),
+                                    )));
+                                } else {
+                                    row.push(None);
+                                }
+                            }
+                            rows.push(row);
+                        }
+                        Expression::Search(search, field, cast) => {
+                            let mut row = vec![];
+                            for (i, column) in columns.iter().enumerate() {
+                                if column == &field {
+                                    let key =
+                                        std::char::from_u32(i as u32).expect("could not make key");
+                                    row.push(Some(Expression::Search(
+                                        search.clone(),
+                                        key.to_string(),
+                                        cast,
+                                    )));
+                                } else {
+                                    row.push(None);
+                                }
+                            }
+                            rows.push(row);
+                        }
+                        _ => rest.push(expression),
+                    }
+                }
+
+                let mut expressions = vec![];
+                if !rows.is_empty() {
+                    expressions.push(Expression::Matrix(columns, rows));
+                }
+                expressions.extend(rest);
+                if expressions.len() == 1 {
+                    expressions
+                        .into_iter()
+                        .next()
+                        .expect("could not get expression")
+                } else {
+                    Expression::BooleanGroup(BoolSym::Or, expressions)
+                }
+            } else {
+                Expression::BooleanGroup(BoolSym::Or, scratch)
+            }
+        }
+        Expression::BooleanExpression(left, symbol, right) => {
+            let left = matrix(*left);
+            let right = matrix(*right);
+            Expression::BooleanExpression(Box::new(left), symbol, Box::new(right))
+        }
+        Expression::Match(symbol, expression) => {
+            Expression::Match(symbol, Box::new(matrix(*expression)))
+        }
+        Expression::Negate(expression) => Expression::Negate(Box::new(matrix(*expression))),
+        Expression::Nested(field, expression) => {
+            Expression::Nested(field, Box::new(matrix(*expression)))
+        }
+        Expression::Boolean(_)
+        | Expression::BooleanGroup(_, _)
+        | Expression::Cast(_, _)
+        | Expression::Field(_)
+        | Expression::Float(_)
+        | Expression::Identifier(_)
+        | Expression::Integer(_)
+        | Expression::Matrix(_, _)
         | Expression::Null
         | Expression::Search(_, _, _) => expression,
     }
@@ -369,17 +682,8 @@ pub fn shake(expression: Expression, rewrite: bool) -> Expression {
             }
         }
         Expression::Match(m, expression) => {
-            // FIXME: Due to some unreachable code in the solver we need to keep the group in for
-            // now...
             let expression = shake(*expression, rewrite);
             Expression::Match(m, Box::new(expression))
-            //match expression {
-            //    Expression::BooleanGroup(_, _) => Expression::Match(m, Box::new(expression)),
-            //    _ => Expression::Match(
-            //        m,
-            //        Box::new(Expression::BooleanGroup(BoolSym::Or, vec![expression])),
-            //    ),
-            //}
         }
         Expression::Negate(expression) => {
             let expression = shake(*expression, rewrite);
@@ -453,6 +757,7 @@ pub fn shake(expression: Expression, rewrite: bool) -> Expression {
         | Expression::Float(_)
         | Expression::Identifier(_)
         | Expression::Integer(_)
+        | Expression::Matrix(_, _)
         | Expression::Null
         | Expression::Search(_, _, _) => expression,
     }

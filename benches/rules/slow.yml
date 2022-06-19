@@ -1,0 +1,41 @@
+---
+detection:
+  A:
+    process.name: cmd
+  B:
+    - process.name: a
+      process.args: a
+    - process.name: b
+      process.args: b
+    - process.name: c
+      process.args: c
+    - process.name: d
+      process.args: d
+    - process.name: e
+      process.args: e
+    - process.name: f
+      process.args: f
+    - process.name: g
+      process.args: g
+    - process.name: h
+      process.args: h
+    - process.name: i
+      process.args: i
+    - process.name: j
+      process.args: j
+    - process.name: k
+      process.args: k
+    - process.name: l
+      process.args: l
+    - process.name: m
+      process.args: m
+
+  condition: A and not B
+true_positives:
+  - process:
+      name: cmd
+      args: /Q /c netstat -anop TCP 1> \\127.0.0.1\ADMIN$\__1573814431.09 2>&1
+true_negatives:
+  - process:
+      name: powershell
+      args: /Q /c netstat -anop TCP 1> \\127.0.0.1\ADMIN$\__1573814431.09 2>&1
