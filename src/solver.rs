@@ -450,190 +450,13 @@ pub(crate) fn solve_expression(
                     _ => unreachable!(),
                 },
                 Expression::BooleanGroup(ref o, ref g) => (o, g),
-                // FIXME: Needle optimisation in search means we can't just call solve_expression,
-                // we need to basically copy the code below...
-                _ => unreachable!(),
+                _ => return match_all(e, identifiers, document),
             };
             for expression in group {
-                // NOTE: Because of needle optimisation we have to handle aho in a `slow` fashion here...
-                if let Expression::Search(Search::AhoCorasick(a, m, _), i, c) = expression {
-                    let value = match document.find(i) {
-                        Some(v) => v,
-                        None => {
-                            debug!("evaluating missing, field not found for {}", expression);
-                            return SolverResult::Missing;
-                        }
-                    };
-                    match (value, c) {
-                        (Value::String(ref x), _) => {
-                            if slow_aho(a, m, x) != m.len() as u64 {
-                                return SolverResult::False;
-                            }
-                        }
-                        (Value::Array(x), _) => {
-                            let mut found = false;
-                            for v in x.iter() {
-                                if let Some(x) = v.as_str() {
-                                    if slow_aho(a, m, x) == m.len() as u64 {
-                                        found = true;
-                                        break;
-                                    }
-                                } else if *c {
-                                    let x = match v {
-                                        Value::Bool(x) => x.to_string(),
-                                        Value::Float(x) => x.to_string(),
-                                        Value::Int(x) => x.to_string(),
-                                        Value::UInt(x) => x.to_string(),
-                                        _ => continue,
-                                    };
-                                    if slow_aho(a, m, x.as_str()) == m.len() as u64 {
-                                        found = true;
-                                        break;
-                                    }
-                                }
-                            }
-                            if !found {
-                                return SolverResult::False;
-                            }
-                        }
-                        (Value::Bool(x), true) => {
-                            let x = x.to_string();
-                            if slow_aho(a, m, x.as_str()) != m.len() as u64 {
-                                return SolverResult::False;
-                            }
-                        }
-                        (Value::Float(x), true) => {
-                            let x = x.to_string();
-                            if slow_aho(a, m, x.as_str()) != m.len() as u64 {
-                                return SolverResult::False;
-                            }
-                        }
-                        (Value::Int(x), true) => {
-                            let x = x.to_string();
-                            if slow_aho(a, m, x.as_str()) != m.len() as u64 {
-                                return SolverResult::False;
-                            }
-                        }
-                        (Value::UInt(x), true) => {
-                            let x = x.to_string();
-                            if slow_aho(a, m, x.as_str()) != m.len() as u64 {
-                                return SolverResult::False;
-                            }
-                        }
-                        (_, _) => {
-                            debug!(
-                                "evaluating false, field is not an array of strings, or a string for {}",
-                                expression
-                            );
-                            return SolverResult::Missing;
-                        }
-                    }
-                } else if let Expression::Search(Search::RegexSet(s, _), i, c) = expression {
-                    let value = match document.find(i) {
-                        Some(v) => v,
-                        None => {
-                            debug!("evaluating missing, field not found for {}", expression);
-                            return SolverResult::Missing;
-                        }
-                    };
-                    match (value, c) {
-                        (Value::String(ref x), _) => {
-                            let mut hits = 0;
-                            for _ in s.matches(x).iter() {
-                                hits += 1;
-                            }
-                            if hits != s.patterns().len() {
-                                return SolverResult::False;
-                            }
-                        }
-                        (Value::Array(x), _) => {
-                            let mut found = false;
-                            for v in x.iter() {
-                                if let Some(x) = v.as_str() {
-                                    let mut hits = 0;
-                                    for _ in s.matches(x).iter() {
-                                        hits += 1;
-                                    }
-                                    if hits == s.patterns().len() {
-                                        found = true;
-                                        break;
-                                    }
-                                } else if *c {
-                                    let x = match v {
-                                        Value::Bool(x) => x.to_string(),
-                                        Value::Float(x) => x.to_string(),
-                                        Value::Int(x) => x.to_string(),
-                                        Value::UInt(x) => x.to_string(),
-                                        _ => continue,
-                                    };
-                                    let mut hits = 0;
-                                    for _ in s.matches(x.as_str()).iter() {
-                                        hits += 1;
-                                    }
-                                    if hits == s.patterns().len() {
-                                        found = true;
-                                        break;
-                                    }
-                                }
-                            }
-                            if !found {
-                                return SolverResult::False;
-                            }
-                        }
-                        (Value::Bool(x), true) => {
-                            let x = x.to_string();
-                            let mut hits = 0;
-                            for _ in s.matches(x.as_str()).iter() {
-                                hits += 1;
-                            }
-                            if hits != s.patterns().len() {
-                                return SolverResult::False;
-                            }
-                        }
-                        (Value::Float(x), true) => {
-                            let x = x.to_string();
-                            let mut hits = 0;
-                            for _ in s.matches(x.as_str()).iter() {
-                                hits += 1;
-                            }
-                            if hits != s.patterns().len() {
-                                return SolverResult::False;
-                            }
-                        }
-                        (Value::Int(x), true) => {
-                            let x = x.to_string();
-                            let mut hits = 0;
-                            for _ in s.matches(x.as_str()).iter() {
-                                hits += 1;
-                            }
-                            if hits != s.patterns().len() {
-                                return SolverResult::False;
-                            }
-                        }
-                        (Value::UInt(x), true) => {
-                            let x = x.to_string();
-                            let mut hits = 0;
-                            for _ in s.matches(x.as_str()).iter() {
-                                hits += 1;
-                            }
-                            if hits != s.patterns().len() {
-                                return SolverResult::False;
-                            }
-                        }
-                        _ => {
-                            debug!(
-                                "evaluating false, field is not an array of strings, or a string for {}",
-                                expression
-                            );
-                            return SolverResult::Missing;
-                        }
-                    }
-                } else {
-                    match solve_expression(expression, identifiers, document) {
-                        SolverResult::True => {}
-                        SolverResult::False => return SolverResult::False,
-                        SolverResult::Missing => return SolverResult::Missing,
-                    }
+                match match_all(expression, identifiers, document) {
+                    SolverResult::True => {}
+                    SolverResult::False => return SolverResult::False,
+                    SolverResult::Missing => return SolverResult::Missing,
                 }
             }
             SolverResult::True
@@ -667,8 +490,6 @@ pub(crate) fn solve_expression(
                 },
                 Expression::BooleanGroup(ref o, ref g) => (o, g),
                 _ => {
-                    // NOTE: We should not really land here but people can write garbage which
-                    // makes us land here...
                     return match solve_expression(e, identifiers, document) {
                         SolverResult::True => {
                             if c == 0 {
@@ -997,6 +818,195 @@ pub(crate) fn solve_expression(
         | Expression::Integer(_)
         | Expression::Null => unreachable!(),
     }
+}
+
+#[inline]
+fn match_all(
+    expression: &Expression,
+    identifiers: &HashMap<String, Expression>,
+    document: &dyn Document,
+) -> SolverResult {
+    // NOTE: Because of needle optimisation we have to handle aho in a `slow` fashion here...
+    if let Expression::Search(Search::AhoCorasick(a, m, _), i, c) = expression {
+        let value = match document.find(i) {
+            Some(v) => v,
+            None => {
+                debug!("evaluating missing, field not found for {}", expression);
+                return SolverResult::Missing;
+            }
+        };
+        match (value, c) {
+            (Value::String(ref x), _) => {
+                if slow_aho(a, m, x) != m.len() as u64 {
+                    return SolverResult::False;
+                }
+            }
+            (Value::Array(x), _) => {
+                let mut found = false;
+                for v in x.iter() {
+                    if let Some(x) = v.as_str() {
+                        if slow_aho(a, m, x) == m.len() as u64 {
+                            found = true;
+                            break;
+                        }
+                    } else if *c {
+                        let x = match v {
+                            Value::Bool(x) => x.to_string(),
+                            Value::Float(x) => x.to_string(),
+                            Value::Int(x) => x.to_string(),
+                            Value::UInt(x) => x.to_string(),
+                            _ => continue,
+                        };
+                        if slow_aho(a, m, x.as_str()) == m.len() as u64 {
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                if !found {
+                    return SolverResult::False;
+                }
+            }
+            (Value::Bool(x), true) => {
+                let x = x.to_string();
+                if slow_aho(a, m, x.as_str()) != m.len() as u64 {
+                    return SolverResult::False;
+                }
+            }
+            (Value::Float(x), true) => {
+                let x = x.to_string();
+                if slow_aho(a, m, x.as_str()) != m.len() as u64 {
+                    return SolverResult::False;
+                }
+            }
+            (Value::Int(x), true) => {
+                let x = x.to_string();
+                if slow_aho(a, m, x.as_str()) != m.len() as u64 {
+                    return SolverResult::False;
+                }
+            }
+            (Value::UInt(x), true) => {
+                let x = x.to_string();
+                if slow_aho(a, m, x.as_str()) != m.len() as u64 {
+                    return SolverResult::False;
+                }
+            }
+            (_, _) => {
+                debug!(
+                    "evaluating false, field is not an array of strings, or a string for {}",
+                    expression
+                );
+                return SolverResult::Missing;
+            }
+        }
+    } else if let Expression::Search(Search::RegexSet(s, _), i, c) = expression {
+        let value = match document.find(i) {
+            Some(v) => v,
+            None => {
+                debug!("evaluating missing, field not found for {}", expression);
+                return SolverResult::Missing;
+            }
+        };
+        match (value, c) {
+            (Value::String(ref x), _) => {
+                let mut hits = 0;
+                for _ in s.matches(x).iter() {
+                    hits += 1;
+                }
+                if hits != s.patterns().len() {
+                    return SolverResult::False;
+                }
+            }
+            (Value::Array(x), _) => {
+                let mut found = false;
+                for v in x.iter() {
+                    if let Some(x) = v.as_str() {
+                        let mut hits = 0;
+                        for _ in s.matches(x).iter() {
+                            hits += 1;
+                        }
+                        if hits == s.patterns().len() {
+                            found = true;
+                            break;
+                        }
+                    } else if *c {
+                        let x = match v {
+                            Value::Bool(x) => x.to_string(),
+                            Value::Float(x) => x.to_string(),
+                            Value::Int(x) => x.to_string(),
+                            Value::UInt(x) => x.to_string(),
+                            _ => continue,
+                        };
+                        let mut hits = 0;
+                        for _ in s.matches(x.as_str()).iter() {
+                            hits += 1;
+                        }
+                        if hits == s.patterns().len() {
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                if !found {
+                    return SolverResult::False;
+                }
+            }
+            (Value::Bool(x), true) => {
+                let x = x.to_string();
+                let mut hits = 0;
+                for _ in s.matches(x.as_str()).iter() {
+                    hits += 1;
+                }
+                if hits != s.patterns().len() {
+                    return SolverResult::False;
+                }
+            }
+            (Value::Float(x), true) => {
+                let x = x.to_string();
+                let mut hits = 0;
+                for _ in s.matches(x.as_str()).iter() {
+                    hits += 1;
+                }
+                if hits != s.patterns().len() {
+                    return SolverResult::False;
+                }
+            }
+            (Value::Int(x), true) => {
+                let x = x.to_string();
+                let mut hits = 0;
+                for _ in s.matches(x.as_str()).iter() {
+                    hits += 1;
+                }
+                if hits != s.patterns().len() {
+                    return SolverResult::False;
+                }
+            }
+            (Value::UInt(x), true) => {
+                let x = x.to_string();
+                let mut hits = 0;
+                for _ in s.matches(x.as_str()).iter() {
+                    hits += 1;
+                }
+                if hits != s.patterns().len() {
+                    return SolverResult::False;
+                }
+            }
+            _ => {
+                debug!(
+                    "evaluating false, field is not an array of strings, or a string for {}",
+                    expression
+                );
+                return SolverResult::Missing;
+            }
+        }
+    } else {
+        match solve_expression(expression, identifiers, document) {
+            SolverResult::True => {}
+            SolverResult::False => return SolverResult::False,
+            SolverResult::Missing => return SolverResult::Missing,
+        }
+    }
+    SolverResult::True
 }
 
 #[inline]

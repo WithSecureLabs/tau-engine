@@ -372,13 +372,14 @@ pub fn shake(expression: Expression, rewrite: bool) -> Expression {
             // FIXME: Due to some unreachable code in the solver we need to keep the group in for
             // now...
             let expression = shake(*expression, rewrite);
-            match expression {
-                Expression::BooleanGroup(_, _) => Expression::Match(m, Box::new(expression)),
-                _ => Expression::Match(
-                    m,
-                    Box::new(Expression::BooleanGroup(BoolSym::Or, vec![expression])),
-                ),
-            }
+            Expression::Match(m, Box::new(expression))
+            //match expression {
+            //    Expression::BooleanGroup(_, _) => Expression::Match(m, Box::new(expression)),
+            //    _ => Expression::Match(
+            //        m,
+            //        Box::new(Expression::BooleanGroup(BoolSym::Or, vec![expression])),
+            //    ),
+            //}
         }
         Expression::Negate(expression) => {
             let expression = shake(*expression, rewrite);
@@ -993,7 +994,6 @@ mod tests {
 
     #[test]
     fn rewrite_rule_0() {
-        // FIXME: For now due to complex searches, we force into a group...
         let expression = Expression::BooleanExpression(
             Box::new(Expression::BooleanExpression(
                 Box::new(Expression::Match(
@@ -1016,13 +1016,10 @@ mod tests {
             Box::new(Expression::BooleanExpression(
                 Box::new(Expression::Match(
                     Match::All,
-                    Box::new(Expression::BooleanGroup(
-                        BoolSym::Or,
-                        vec![Expression::Search(
-                            Search::Exact("a".to_owned()),
-                            "a".to_owned(),
-                            false,
-                        )],
+                    Box::new(Expression::Search(
+                        Search::Exact("a".to_owned()),
+                        "a".to_owned(),
+                        false,
                     )),
                 )),
                 BoolSym::Or,
