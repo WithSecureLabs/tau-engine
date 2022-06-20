@@ -171,6 +171,7 @@ extern crate test;
 
 pub use self::document::Document;
 pub use self::error::{Error, Kind as ErrorKind};
+pub use self::optimiser::Optimisations;
 pub use self::rule::Rule;
 pub use self::solver::solve;
 pub use self::value::{Array, AsValue, Object, Value};

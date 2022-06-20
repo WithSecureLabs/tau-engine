@@ -6,6 +6,29 @@ use regex::{RegexBuilder, RegexSetBuilder};
 use crate::parser::{Expression, Match, MatchType, Search};
 use crate::tokeniser::BoolSym;
 
+/// The types of optimisations to apply to a rule.
+pub struct Optimisations {
+    /// caalesce the identifier's expressions into the condition.
+    pub coalesce: bool,
+    /// make use of matrix expressions.
+    pub matrix: bool,
+    /// rewrite inefficient string searches.
+    pub rewrite: bool,
+    /// tree shake the rule logic to ensure efficiency.
+    pub shake: bool,
+}
+
+impl Default for Optimisations {
+    fn default() -> Self {
+        Self {
+            coalesce: true,
+            matrix: true,
+            rewrite: true,
+            shake: true,
+        }
+    }
+}
+
 pub fn coalesce(expression: Expression, identifiers: &HashMap<String, Expression>) -> Expression {
     match expression {
         Expression::BooleanGroup(symbol, expressions) => {

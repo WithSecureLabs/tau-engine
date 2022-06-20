@@ -10,8 +10,8 @@ macro_rules! solve_rule {
             }
 
             #[test]
-            fn [< solve_ $rule _shaken >] () {
-                let rule = common::load_shaken_rule($rule).expect("invalid rule");
+            fn [< solve_ $rule _optimised >] () {
+                let rule = common::load_optimised_rule($rule).expect("invalid rule");
                 assert_eq!(rule.validate().unwrap(), true);
             }
         }

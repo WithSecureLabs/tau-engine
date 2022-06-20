@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_yaml::Value as Yaml;
 
 use crate::document::Document;
-use crate::optimiser;
+use crate::optimiser::{self, Optimisations};
 use crate::parser::{self, Expression};
 use crate::solver;
 use crate::tokeniser::{ModSym, Token, Tokeniser};
@@ -156,22 +156,12 @@ impl<'de> Deserialize<'de> for Detection {
 // options...
 /// A `RuleLoader` can be used to create a `Rule` with custom configuration.
 pub struct RuleLoader {
-    coalesce: bool,
-    optimise: bool,
-    matrix: bool,
-    rewrite: bool,
-    shake: bool,
+    optimise: Option<Optimisations>,
 }
 
 impl Default for RuleLoader {
     fn default() -> Self {
-        Self {
-            coalesce: true,
-            matrix: true,
-            optimise: false,
-            rewrite: true,
-            shake: true,
-        }
+        Self { optimise: None }
     }
 }
 
@@ -193,21 +183,21 @@ impl RuleLoader {
         // FIXME: If we debug with these there will be confusion, as the raw values will be
         // incorrect.
         let mut detection = rule.detection;
-        if self.optimise {
-            if self.coalesce {
+        if let Some(optimise) = self.optimise {
+            if optimise.coalesce {
                 detection.expression =
                     optimiser::coalesce(detection.expression, &detection.identifiers);
                 detection.identifiers.clear();
             }
-            if self.shake {
-                detection.expression = optimiser::shake(detection.expression, self.rewrite);
+            if optimise.shake {
+                detection.expression = optimiser::shake(detection.expression, optimise.rewrite);
                 detection.identifiers = detection
                     .identifiers
                     .into_iter()
-                    .map(|(k, v)| (k, optimiser::shake(v, self.rewrite)))
+                    .map(|(k, v)| (k, optimiser::shake(v, optimise.rewrite)))
                     .collect();
             }
-            if self.matrix {
+            if optimise.matrix {
                 detection.expression = optimiser::matrix(detection.expression);
                 detection.identifiers = detection
                     .identifiers
@@ -229,21 +219,21 @@ impl RuleLoader {
         // FIXME: If we debug with these there will be confusion, as the raw values will be
         // incorrect.
         let mut detection = rule.detection;
-        if self.optimise {
-            if self.coalesce {
+        if let Some(optimise) = self.optimise {
+            if optimise.coalesce {
                 detection.expression =
                     optimiser::coalesce(detection.expression, &detection.identifiers);
                 detection.identifiers.clear();
             }
-            if self.shake {
-                detection.expression = optimiser::shake(detection.expression, self.rewrite);
+            if optimise.shake {
+                detection.expression = optimiser::shake(detection.expression, optimise.rewrite);
                 detection.identifiers = detection
                     .identifiers
                     .into_iter()
-                    .map(|(k, v)| (k, optimiser::shake(v, self.rewrite)))
+                    .map(|(k, v)| (k, optimiser::shake(v, optimise.rewrite)))
                     .collect();
             }
-            if self.matrix {
+            if optimise.matrix {
                 detection.expression = optimiser::matrix(detection.expression);
                 detection.identifiers = detection
                     .identifiers
@@ -259,46 +249,11 @@ impl RuleLoader {
         })
     }
 
-    /// Allow Tau to coalesce the identifier's expressions into the condition.
-    ///
-    /// This allows for the identifier's expressions to be embedded for increased speed at the cost
-    /// of space.
-    ///
-    /// This option is enabled by default. This option is only applied when optimise is enabled.
-    pub fn coalesce(mut self, yes: bool) -> Self {
-        self.coalesce = yes;
-        self
-    }
-
-    /// Allow Tau to optimise the rule to use matrix expressions.
-    ///
-    /// This option is enabled by default. This option is only applied when optimise is enabled.
-    pub fn matrix(mut self, yes: bool) -> Self {
-        self.matrix = yes;
-        self
-    }
-
     /// Allow Tau to optimise the rule when loaded.
     ///
     /// This option is disabled by default.
-    pub fn optimise(mut self, yes: bool) -> Self {
-        self.optimise = yes;
-        self
-    }
-
-    /// Allow Tau to rewrite inefficient string searches.
-    ///
-    /// This option is enabled by default. This option is only applied if optimise & shake are enabled.
-    pub fn rewrite(mut self, yes: bool) -> Self {
-        self.rewrite = yes;
-        self
-    }
-
-    /// Allow Tau to tree shake the rule when loaded.
-    ///
-    /// This option is enabled by default. This option is only applied when optimise is enabled.
-    pub fn shake(mut self, yes: bool) -> Self {
-        self.shake = yes;
+    pub fn optimise(mut self, options: Option<Optimisations>) -> Self {
+        self.optimise = options;
         self
     }
 }
@@ -634,29 +589,24 @@ impl Rule {
         RuleLoader::new().from_value(value)
     }
 
-    /// Allow Tau to optimise the rule when loaded.
-    ///
-    /// # Options
-    /// - coalesce: tau will caalesce the identifier's expressions into the condition.
-    /// - matrix: tau will make use of matrix expressions.
-    /// - rewrite: tau will try to rewrite inefficient string searches (requires shaking).
-    /// - shake: tau will tree shake the rules logic to ensure the logic is efficient.
-    pub fn optimise(mut self, coalesce: bool, matrix: bool, rewrite: bool, shake: bool) -> Self {
-        if coalesce {
+    /// Optimise the rule with the optimisations provided.
+    pub fn optimise(mut self, options: Optimisations) -> Self {
+        if options.coalesce {
             self.detection.expression =
                 optimiser::coalesce(self.detection.expression, &self.detection.identifiers);
             self.detection.identifiers.clear();
         }
-        if shake {
-            self.detection.expression = optimiser::shake(self.detection.expression, rewrite);
+        if options.shake {
+            self.detection.expression =
+                optimiser::shake(self.detection.expression, options.rewrite);
             self.detection.identifiers = self
                 .detection
                 .identifiers
                 .into_iter()
-                .map(|(k, v)| (k, optimiser::shake(v, rewrite)))
+                .map(|(k, v)| (k, optimiser::shake(v, options.rewrite)))
                 .collect();
         }
-        if matrix {
+        if options.matrix {
             self.detection.expression = optimiser::matrix(self.detection.expression);
             self.detection.identifiers = self
                 .detection
