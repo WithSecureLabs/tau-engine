@@ -158,15 +158,15 @@ impl Expression {
             | Self::Field(_)
             | Self::Float(_)
             | Self::Integer(_)
-            | Self::Null
-            | Self::Search(_, _, _) => false,
+            | Self::Null => false,
             Self::BooleanGroup(_, _)
             | Self::BooleanExpression(_, _, _)
             | Self::Identifier(_)
             | Self::Match(_, _)
             | Self::Matrix(_, _)
             | Self::Negate(_)
-            | Self::Nested(_, _) => true,
+            | Self::Nested(_, _)
+            | Self::Search(_, _, _) => true,
         }
     }
 }
@@ -1502,7 +1502,12 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                 } else if !multiple && group.len() == 1 {
                     group.into_iter().next().expect("could not get expression")
                 } else if let Expression::Match(m, _) = e {
-                    Expression::Match(m, Box::new(Expression::BooleanGroup(BoolSym::Or, group)))
+                    if group.len() == 1 {
+                        let group = group.into_iter().next().expect("could not get expression");
+                        Expression::Match(m, Box::new(group))
+                    } else {
+                        Expression::Match(m, Box::new(Expression::BooleanGroup(BoolSym::Or, group)))
+                    }
                 } else {
                     Expression::BooleanGroup(BoolSym::Or, group)
                 }

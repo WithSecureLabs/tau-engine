@@ -1,0 +1,21 @@
+---
+detection:
+  condition: all(selection)
+  selection:
+    - in:
+        - 1
+        - 2
+    - out: foo*
+    - out: '*bar'
+
+true_positives:
+  - in: 1
+    out: foobar
+
+true_negatives:
+  - in: 3
+    out: foobar
+  - in: 1
+    out: fobar
+  - in: 1
+    out: fooar

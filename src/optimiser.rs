@@ -116,6 +116,29 @@ pub fn matrix(expression: Expression) -> Expression {
                         if valid {
                             for expression in expressions {
                                 match expression {
+                                    Expression::BooleanExpression(left, _, right) => {
+                                        match (&**left, &**right) {
+                                            (
+                                                Expression::Cast(field, _),
+                                                Expression::Boolean(_),
+                                            )
+                                            | (Expression::Cast(field, _), Expression::Float(_))
+                                            | (
+                                                Expression::Cast(field, _),
+                                                Expression::Integer(_),
+                                            )
+                                            | (Expression::Cast(field, _), Expression::Null)
+                                            | (Expression::Field(field), Expression::Boolean(_))
+                                            | (Expression::Field(field), Expression::Float(_))
+                                            | (Expression::Field(field), Expression::Integer(_))
+                                            | (Expression::Field(field), Expression::Null) => {
+                                                let count =
+                                                    fields.entry(field.clone()).or_insert(0);
+                                                *count += 1;
+                                            }
+                                            (_, _) => {}
+                                        }
+                                    }
                                     Expression::Nested(field, _)
                                     | Expression::Search(_, field, _) => {
                                         let count = fields.entry(field.clone()).or_insert(0);
@@ -359,9 +382,16 @@ pub fn matrix(expression: Expression) -> Expression {
             let right = matrix(*right);
             Expression::BooleanExpression(Box::new(left), symbol, Box::new(right))
         }
-        Expression::Match(symbol, expression) => {
-            Expression::Match(symbol, Box::new(matrix(*expression)))
-        }
+        Expression::Match(kind, expression) => match *expression {
+            Expression::BooleanGroup(symbol, expressions) => {
+                let mut scratch = vec![];
+                for expression in expressions {
+                    scratch.push(shake_1(expression));
+                }
+                Expression::Match(kind, Box::new(Expression::BooleanGroup(symbol, scratch)))
+            }
+            expression => Expression::Match(kind, Box::new(shake_1(expression))),
+        },
         Expression::Negate(expression) => Expression::Negate(Box::new(matrix(*expression))),
         Expression::Nested(field, expression) => {
             Expression::Nested(field, Box::new(matrix(*expression)))
@@ -379,256 +409,118 @@ pub fn matrix(expression: Expression) -> Expression {
     }
 }
 
-pub fn shake(expression: Expression, rewrite: bool) -> Expression {
+fn rewrite_search(search: Search) -> Search {
+    match search {
+        Search::Regex(regex, insensitive) => {
+            let mut pattern = regex.as_str().to_owned();
+            if let Some(tail) = pattern.strip_prefix(".*") {
+                pattern = tail.to_owned();
+            }
+            if let Some(head) = pattern.strip_suffix(".*") {
+                pattern = head.to_owned();
+            }
+            Search::Regex(
+                RegexBuilder::new(&pattern)
+                    .case_insensitive(insensitive)
+                    .build()
+                    .expect("could not build regex"),
+                insensitive,
+            )
+        }
+        Search::RegexSet(regex, insensitive) => {
+            let mut patterns = vec![];
+            for pattern in regex.patterns() {
+                let mut pattern = pattern.to_owned();
+                if let Some(tail) = pattern.strip_prefix(".*") {
+                    pattern = tail.to_owned();
+                }
+                if let Some(head) = pattern.strip_suffix(".*") {
+                    pattern = head.to_owned();
+                }
+                patterns.push(pattern);
+            }
+            Search::RegexSet(
+                RegexSetBuilder::new(patterns)
+                    .case_insensitive(insensitive)
+                    .build()
+                    .expect("could not build regex"),
+                insensitive,
+            )
+        }
+        _ => search,
+    }
+}
+
+pub fn rewrite(expression: Expression) -> Expression {
+    match expression {
+        Expression::BooleanGroup(symbol, expressions) => {
+            let mut scratch = vec![];
+            for expression in expressions {
+                let rewriten = rewrite(expression);
+                scratch.push(rewriten);
+            }
+            Expression::BooleanGroup(symbol, scratch)
+        }
+        Expression::BooleanExpression(left, symbol, right) => {
+            let left = rewrite(*left);
+            let right = rewrite(*right);
+            Expression::BooleanExpression(Box::new(left), symbol, Box::new(right))
+        }
+        Expression::Match(symbol, expression) => {
+            Expression::Match(symbol, Box::new(rewrite(*expression)))
+        }
+        Expression::Negate(expression) => Expression::Negate(Box::new(rewrite(*expression))),
+        Expression::Nested(field, expression) => {
+            Expression::Nested(field, Box::new(rewrite(*expression)))
+        }
+        Expression::Search(search, f, c) => Expression::Search(rewrite_search(search), f, c),
+        Expression::Boolean(_)
+        | Expression::Cast(_, _)
+        | Expression::Field(_)
+        | Expression::Float(_)
+        | Expression::Identifier(_)
+        | Expression::Integer(_)
+        | Expression::Matrix(_, _)
+        | Expression::Null => expression,
+    }
+}
+
+pub fn shake(expression: Expression) -> Expression {
+    // This is a tad lazy but due to the inability to set shake priority its actually easier to run
+    // the main shaking, then once we know they are in a set state, perform additional shaking on
+    // top of that...
+    let expression = shake_0(expression);
+    let expression = shake_1(expression);
+    expression
+}
+
+fn shake_0(expression: Expression) -> Expression {
     match expression {
         Expression::BooleanGroup(symbol, expressions) => {
             let length = expressions.len();
             let expressions = match symbol {
                 BoolSym::And => {
+                    // NOTE: We need BooleanExpression to be fully shaken before we run this, so
+                    // this optimisation is done in shake_1.
                     let mut scratch = vec![];
                     for expression in expressions {
-                        let shaken = shake(expression, rewrite);
+                        let shaken = shake_0(expression);
                         scratch.push(shaken);
                     }
                     scratch
                 }
                 BoolSym::Or => {
-                    let mut needles = HashMap::new();
-                    let mut nested = HashMap::new();
-                    let mut patterns = HashMap::new();
-
-                    // NOTE: Order is crucial here just like in the parser, thus we copy its ideal
-                    // ordering.
-                    let mut any = vec![];
-                    let mut exact = vec![];
-                    let mut starts_with = vec![];
-                    let mut ends_with = vec![];
-                    let mut contains = vec![];
-                    let mut aho = vec![];
-                    let mut regex = vec![];
-                    let mut regex_set = vec![];
-                    let mut rest = vec![];
-
-                    for expression in expressions {
-                        let shaken = shake(expression, rewrite);
-
-                        match shaken {
-                            Expression::Nested(field, expression) => {
-                                let expressions = nested.entry(field).or_insert(vec![]);
-                                (*expressions).push(*expression);
-                            }
-                            Expression::Search(
-                                Search::AhoCorasick(_, contexts, insensitive),
-                                field,
-                                cast,
-                            ) => {
-                                let expressions =
-                                    needles.entry((field, cast, insensitive)).or_insert(vec![]);
-                                for context in contexts {
-                                    let value = context.value().to_owned();
-                                    (*expressions).push((context.clone(), value));
-                                }
-                            }
-                            Expression::Search(Search::Contains(value), field, cast) => {
-                                let expressions =
-                                    needles.entry((field, cast, false)).or_insert(vec![]);
-                                (*expressions).push((MatchType::Contains(value.clone()), value));
-                            }
-                            Expression::Search(Search::EndsWith(value), field, cast) => {
-                                let expressions =
-                                    needles.entry((field, cast, false)).or_insert(vec![]);
-                                (*expressions).push((MatchType::EndsWith(value.clone()), value));
-                            }
-                            Expression::Search(Search::Exact(value), field, cast) => {
-                                let expressions =
-                                    needles.entry((field, cast, false)).or_insert(vec![]);
-                                (*expressions).push((MatchType::Exact(value.clone()), value));
-                            }
-                            Expression::Search(Search::StartsWith(value), field, cast) => {
-                                let expressions =
-                                    needles.entry((field, cast, false)).or_insert(vec![]);
-                                (*expressions).push((MatchType::StartsWith(value.clone()), value));
-                            }
-                            Expression::Search(Search::Any, _, _) => {
-                                any.push(shaken);
-                            }
-                            Expression::Search(Search::Regex(r, insensitive), field, cast) => {
-                                let patterns =
-                                    patterns.entry((field, cast, insensitive)).or_insert(vec![]);
-                                (*patterns).push(r.as_str().to_owned());
-                            }
-                            Expression::Search(Search::RegexSet(r, insensitive), field, cast) => {
-                                let patterns =
-                                    patterns.entry((field, cast, insensitive)).or_insert(vec![]);
-                                for pattern in r.patterns() {
-                                    (*patterns).push(pattern.to_owned());
-                                }
-                            }
-                            _ => rest.push(shaken),
-                        }
-                    }
-
-                    for ((field, cast, insensitive), searches) in needles {
-                        if !insensitive && searches.len() == 1 {
-                            let search = searches.into_iter().next().expect("could not get search");
-                            match search.0 {
-                                MatchType::Contains(v) => {
-                                    contains.push(Expression::Search(
-                                        Search::Contains(v),
-                                        field,
-                                        cast,
-                                    ));
-                                }
-                                MatchType::EndsWith(v) => {
-                                    ends_with.push(Expression::Search(
-                                        Search::EndsWith(v),
-                                        field,
-                                        cast,
-                                    ));
-                                }
-                                MatchType::Exact(v) => {
-                                    exact.push(Expression::Search(Search::Exact(v), field, cast));
-                                }
-                                MatchType::StartsWith(v) => {
-                                    starts_with.push(Expression::Search(
-                                        Search::StartsWith(v),
-                                        field,
-                                        cast,
-                                    ));
-                                }
-                            };
-                        } else {
-                            let (context, needles): (Vec<_>, Vec<_>) = searches.into_iter().unzip();
-                            let expression = Expression::Search(
-                                Search::AhoCorasick(
-                                    Box::new(
-                                        AhoCorasickBuilder::new()
-                                            .dfa(true)
-                                            .ascii_case_insensitive(insensitive)
-                                            .build(needles),
-                                    ),
-                                    context,
-                                    insensitive,
-                                ),
-                                field,
-                                cast,
-                            );
-                            aho.push(expression);
-                        };
-                    }
-
-                    for (field, expressions) in nested {
-                        let shaken = if expressions.len() == 1 {
-                            shake(
-                                expressions
-                                    .into_iter()
-                                    .next()
-                                    .expect("could not get expression"),
-                                rewrite,
-                            )
-                        } else {
-                            shake(Expression::BooleanGroup(symbol, expressions), rewrite)
-                        };
-                        rest.push(Expression::Nested(field, Box::new(shaken)));
-                    }
-
-                    for ((field, cast, insensitive), patterns) in patterns {
-                        if patterns.len() == 1 {
-                            let pattern =
-                                patterns.into_iter().next().expect("could not get pattern");
-                            let expression = Expression::Search(
-                                Search::Regex(
-                                    RegexBuilder::new(&pattern)
-                                        .case_insensitive(insensitive)
-                                        .build()
-                                        .expect("could not build regex"),
-                                    insensitive,
-                                ),
-                                field,
-                                cast,
-                            );
-                            regex.push(expression);
-                        } else {
-                            let expression = Expression::Search(
-                                Search::RegexSet(
-                                    RegexSetBuilder::new(patterns)
-                                        .case_insensitive(insensitive)
-                                        .build()
-                                        .expect("could not build regex set"),
-                                    insensitive,
-                                ),
-                                field,
-                                cast,
-                            );
-                            regex_set.push(expression);
-                        }
-                    }
-
                     let mut scratch = vec![];
-                    scratch.extend(any);
-                    exact.sort_by(|x, y| match (x, y) {
-                        (
-                            Expression::Search(Search::Exact(a), _, _),
-                            Expression::Search(Search::Exact(b), _, _),
-                        ) => a.len().cmp(&b.len()),
-                        _ => std::cmp::Ordering::Equal,
-                    });
-                    scratch.extend(exact);
-                    starts_with.sort_by(|x, y| match (x, y) {
-                        (
-                            Expression::Search(Search::StartsWith(a), _, _),
-                            Expression::Search(Search::StartsWith(b), _, _),
-                        ) => a.len().cmp(&b.len()),
-                        _ => std::cmp::Ordering::Equal,
-                    });
-                    scratch.extend(starts_with);
-                    ends_with.sort_by(|x, y| match (x, y) {
-                        (
-                            Expression::Search(Search::EndsWith(a), _, _),
-                            Expression::Search(Search::EndsWith(b), _, _),
-                        ) => a.len().cmp(&b.len()),
-                        _ => std::cmp::Ordering::Equal,
-                    });
-                    scratch.extend(ends_with);
-                    contains.sort_by(|x, y| match (x, y) {
-                        (
-                            Expression::Search(Search::Contains(a), _, _),
-                            Expression::Search(Search::Contains(b), _, _),
-                        ) => a.len().cmp(&b.len()),
-                        _ => std::cmp::Ordering::Equal,
-                    });
-                    scratch.extend(contains);
-                    aho.sort_by(|x, y| match (x, y) {
-                        (
-                            Expression::Search(Search::AhoCorasick(_, a, case0), _, _),
-                            Expression::Search(Search::AhoCorasick(_, b, case1), _, _),
-                        ) => (b.len(), case1).cmp(&(a.len(), case0)),
-                        _ => std::cmp::Ordering::Equal,
-                    });
-                    scratch.extend(aho);
-                    regex.sort_by(|x, y| match (x, y) {
-                        (
-                            Expression::Search(Search::Regex(reg0, case0), _, _),
-                            Expression::Search(Search::Regex(reg1, case1), _, _),
-                        ) => (reg0.as_str(), case0).cmp(&(reg1.as_str(), case1)),
-                        _ => std::cmp::Ordering::Equal,
-                    });
-                    scratch.extend(regex);
-                    regex_set.sort_by(|x, y| match (x, y) {
-                        (
-                            Expression::Search(Search::RegexSet(set0, case0), _, _),
-                            Expression::Search(Search::RegexSet(set1, case1), _, _),
-                        ) => (set0.patterns(), case0).cmp(&(set1.patterns(), case1)),
-                        _ => std::cmp::Ordering::Equal,
-                    });
-                    scratch.extend(regex_set);
-                    scratch.extend(rest);
+                    for expression in expressions {
+                        let shaken = shake_0(expression);
+                        scratch.push(shaken);
+                    }
                     scratch
                 }
                 _ => unreachable!(),
             };
             if expressions.len() != length {
-                shake(Expression::BooleanGroup(symbol, expressions), rewrite)
+                shake_0(Expression::BooleanGroup(symbol, expressions))
             } else if expressions.len() == 1 {
                 expressions
                     .into_iter()
@@ -639,8 +531,8 @@ pub fn shake(expression: Expression, rewrite: bool) -> Expression {
             }
         }
         Expression::BooleanExpression(left, symbol, right) => {
-            let left = shake(*left, rewrite);
-            let right = shake(*right, rewrite);
+            let left = shake_0(*left);
+            let right = shake_0(*right);
             match (left, symbol, right) {
                 (
                     Expression::BooleanGroup(BoolSym::And, mut left),
@@ -648,16 +540,16 @@ pub fn shake(expression: Expression, rewrite: bool) -> Expression {
                     Expression::BooleanGroup(BoolSym::And, right),
                 ) => {
                     left.extend(right);
-                    shake(Expression::BooleanGroup(BoolSym::And, left), rewrite)
+                    shake_0(Expression::BooleanGroup(BoolSym::And, left))
                 }
                 (Expression::BooleanGroup(BoolSym::And, mut left), BoolSym::And, right) => {
                     left.push(right);
-                    shake(Expression::BooleanGroup(BoolSym::And, left), rewrite)
+                    shake_0(Expression::BooleanGroup(BoolSym::And, left))
                 }
                 (left, BoolSym::And, Expression::BooleanGroup(BoolSym::And, right)) => {
                     let mut left = vec![left];
                     left.extend(right);
-                    shake(Expression::BooleanGroup(BoolSym::And, left), rewrite)
+                    shake_0(Expression::BooleanGroup(BoolSym::And, left))
                 }
                 (
                     Expression::BooleanGroup(BoolSym::Or, mut left),
@@ -665,114 +557,378 @@ pub fn shake(expression: Expression, rewrite: bool) -> Expression {
                     Expression::BooleanGroup(BoolSym::Or, right),
                 ) => {
                     left.extend(right);
-                    shake(Expression::BooleanGroup(BoolSym::Or, left), rewrite)
+                    shake_0(Expression::BooleanGroup(BoolSym::Or, left))
                 }
                 (Expression::BooleanGroup(BoolSym::Or, mut left), BoolSym::Or, right) => {
                     left.push(right);
-                    shake(Expression::BooleanGroup(BoolSym::Or, left), rewrite)
+                    shake_0(Expression::BooleanGroup(BoolSym::Or, left))
                 }
                 (left, BoolSym::Or, Expression::BooleanGroup(BoolSym::Or, right)) => {
                     let mut left = vec![left];
                     left.extend(right);
-                    shake(Expression::BooleanGroup(BoolSym::Or, left), rewrite)
+                    shake_0(Expression::BooleanGroup(BoolSym::Or, left))
                 }
-                (Expression::BooleanExpression(x, BoolSym::And, y), BoolSym::And, z) => shake(
-                    Expression::BooleanGroup(BoolSym::And, vec![*x, *y, z]),
-                    rewrite,
-                ),
-                (x, BoolSym::And, Expression::BooleanExpression(y, BoolSym::And, z)) => shake(
-                    Expression::BooleanGroup(BoolSym::And, vec![x, *y, *z]),
-                    rewrite,
-                ),
-                (Expression::BooleanExpression(x, BoolSym::Or, y), BoolSym::Or, z) => shake(
-                    Expression::BooleanGroup(BoolSym::Or, vec![*x, *y, z]),
-                    rewrite,
-                ),
-                (x, BoolSym::Or, Expression::BooleanExpression(y, BoolSym::Or, z)) => shake(
-                    Expression::BooleanGroup(BoolSym::Or, vec![x, *y, *z]),
-                    rewrite,
-                ),
-                (Expression::Negate(left), BoolSym::And, Expression::Negate(right)) => shake(
-                    Expression::Negate(Box::new(shake(
-                        Expression::BooleanExpression(left, BoolSym::Or, right),
-                        rewrite,
-                    ))),
-                    rewrite,
-                ),
+                (Expression::BooleanExpression(x, BoolSym::And, y), BoolSym::And, z) => {
+                    shake_0(Expression::BooleanGroup(BoolSym::And, vec![*x, *y, z]))
+                }
+                (x, BoolSym::And, Expression::BooleanExpression(y, BoolSym::And, z)) => {
+                    shake_0(Expression::BooleanGroup(BoolSym::And, vec![x, *y, *z]))
+                }
+                (Expression::BooleanExpression(x, BoolSym::Or, y), BoolSym::Or, z) => {
+                    shake_0(Expression::BooleanGroup(BoolSym::Or, vec![*x, *y, z]))
+                }
+                (x, BoolSym::Or, Expression::BooleanExpression(y, BoolSym::Or, z)) => {
+                    shake_0(Expression::BooleanGroup(BoolSym::Or, vec![x, *y, *z]))
+                }
+                // FIXME: This will cause false positives due to how true/false/missing is
+                // calculated, there may be a way around this but the speed up is not worth it. We
+                // could probably put faith in brackets?
+                //(Expression::Negate(left), BoolSym::And, Expression::Negate(right)) => {
+                //    shake_0(Expression::Negate(Box::new(shake_0(
+                //        Expression::BooleanExpression(left, BoolSym::Or, right),
+                //    ))))
+                //}
                 (left, _, right) => {
                     Expression::BooleanExpression(Box::new(left), symbol, Box::new(right))
                 }
             }
         }
         Expression::Match(m, expression) => {
-            let expression = shake(*expression, rewrite);
+            let expression = shake_0(*expression);
             Expression::Match(m, Box::new(expression))
         }
         Expression::Negate(expression) => {
-            let expression = shake(*expression, rewrite);
+            let expression = shake_0(*expression);
             match expression {
-                Expression::BooleanGroup(BoolSym::Or, _) => shake(
-                    Expression::Match(Match::Of(0), Box::new(expression)),
-                    rewrite,
-                ),
-                Expression::Negate(inner) => shake(*inner, rewrite),
+                Expression::Negate(inner) => shake_0(*inner),
                 _ => Expression::Negate(Box::new(expression)),
             }
         }
         Expression::Nested(field, expression) => {
-            Expression::Nested(field, Box::new(shake(*expression, rewrite)))
+            Expression::Nested(field, Box::new(shake_0(*expression)))
         }
-        Expression::Search(Search::Regex(regex, insensitive), f, c) => {
-            if rewrite {
-                let mut pattern = regex.as_str().to_owned();
-                if let Some(tail) = pattern.strip_prefix(".*") {
-                    pattern = tail.to_owned();
-                }
-                if let Some(head) = pattern.strip_suffix(".*") {
-                    pattern = head.to_owned();
-                }
-                Expression::Search(
-                    Search::Regex(
-                        RegexBuilder::new(&pattern)
-                            .case_insensitive(insensitive)
-                            .build()
-                            .expect("could not build regex"),
-                        insensitive,
-                    ),
-                    f,
-                    c,
-                )
+        Expression::Boolean(_)
+        | Expression::Cast(_, _)
+        | Expression::Field(_)
+        | Expression::Float(_)
+        | Expression::Identifier(_)
+        | Expression::Integer(_)
+        | Expression::Matrix(_, _)
+        | Expression::Null
+        | Expression::Search(_, _, _) => expression,
+    }
+}
+
+fn shake_1(expression: Expression) -> Expression {
+    match expression {
+        // TODO: Due to limitations with how we handle accessing array data it is not possible
+        // to enable this optimisation yet... There is no way to say match all within an array of
+        // fields...
+        Expression::BooleanGroup(BoolSym::And, expressions) => {
+            let length = expressions.len();
+
+            let mut nested = HashMap::new();
+
+            let mut scratch = vec![];
+
+            for expression in expressions {
+                let shaken = shake_1(expression);
+                match shaken {
+                    Expression::Nested(field, expression) => {
+                        let expressions = nested.entry(field).or_insert(vec![]);
+                        (*expressions).push(*expression);
+                    }
+                    shaken => scratch.push(shaken),
+                };
+            }
+            for (field, expressions) in nested {
+                let shaken = if expressions.len() == 1 {
+                    shake_1(
+                        expressions
+                            .into_iter()
+                            .next()
+                            .expect("could not get expression"),
+                    )
+                } else {
+                    shake_1(Expression::Match(
+                        Match::All,
+                        Box::new(Expression::BooleanGroup(BoolSym::Or, expressions)),
+                    ))
+                };
+                scratch.push(Expression::Nested(field, Box::new(shaken)));
+            }
+            if scratch.len() != length {
+                shake_1(Expression::BooleanGroup(BoolSym::And, scratch))
+            } else if scratch.len() == 1 {
+                scratch
+                    .into_iter()
+                    .next()
+                    .expect("could not get expression")
             } else {
-                Expression::Search(Search::Regex(regex, insensitive), f, c)
+                Expression::BooleanGroup(BoolSym::And, scratch)
             }
         }
-        Expression::Search(Search::RegexSet(regex, insensitive), f, c) => {
-            if rewrite {
-                let mut patterns = vec![];
-                for pattern in regex.patterns() {
-                    let mut pattern = pattern.to_owned();
-                    if let Some(tail) = pattern.strip_prefix(".*") {
-                        pattern = tail.to_owned();
+        Expression::BooleanGroup(BoolSym::Or, expressions) => {
+            let length = expressions.len();
+            let expressions = {
+                let mut needles = HashMap::new();
+                let mut nested = HashMap::new();
+                let mut patterns = HashMap::new();
+
+                // NOTE: Order is crucial here just like in the parser, thus we copy its ideal
+                // ordering.
+                let mut any = vec![];
+                let mut exact = vec![];
+                let mut starts_with = vec![];
+                let mut ends_with = vec![];
+                let mut contains = vec![];
+                let mut aho = vec![];
+                let mut regex = vec![];
+                let mut regex_set = vec![];
+                let mut rest = vec![];
+
+                for expression in expressions {
+                    let shaken = shake_1(expression);
+
+                    match shaken {
+                        Expression::Nested(field, expression) => {
+                            let expressions = nested.entry(field).or_insert(vec![]);
+                            (*expressions).push(*expression);
+                        }
+                        Expression::Search(
+                            Search::AhoCorasick(_, contexts, insensitive),
+                            field,
+                            cast,
+                        ) => {
+                            let expressions =
+                                needles.entry((field, cast, insensitive)).or_insert(vec![]);
+                            for context in contexts {
+                                let value = context.value().to_owned();
+                                (*expressions).push((context.clone(), value));
+                            }
+                        }
+                        Expression::Search(Search::Contains(value), field, cast) => {
+                            let expressions = needles.entry((field, cast, false)).or_insert(vec![]);
+                            (*expressions).push((MatchType::Contains(value.clone()), value));
+                        }
+                        Expression::Search(Search::EndsWith(value), field, cast) => {
+                            let expressions = needles.entry((field, cast, false)).or_insert(vec![]);
+                            (*expressions).push((MatchType::EndsWith(value.clone()), value));
+                        }
+                        Expression::Search(Search::Exact(value), field, cast) => {
+                            let expressions = needles.entry((field, cast, false)).or_insert(vec![]);
+                            (*expressions).push((MatchType::Exact(value.clone()), value));
+                        }
+                        Expression::Search(Search::StartsWith(value), field, cast) => {
+                            let expressions = needles.entry((field, cast, false)).or_insert(vec![]);
+                            (*expressions).push((MatchType::StartsWith(value.clone()), value));
+                        }
+                        Expression::Search(Search::Any, _, _) => {
+                            any.push(shaken);
+                        }
+                        Expression::Search(Search::Regex(r, insensitive), field, cast) => {
+                            let patterns =
+                                patterns.entry((field, cast, insensitive)).or_insert(vec![]);
+                            (*patterns).push(r.as_str().to_owned());
+                        }
+                        Expression::Search(Search::RegexSet(r, insensitive), field, cast) => {
+                            let patterns =
+                                patterns.entry((field, cast, insensitive)).or_insert(vec![]);
+                            for pattern in r.patterns() {
+                                (*patterns).push(pattern.to_owned());
+                            }
+                        }
+                        _ => rest.push(shaken),
                     }
-                    if let Some(head) = pattern.strip_suffix(".*") {
-                        pattern = head.to_owned();
-                    }
-                    patterns.push(pattern);
                 }
-                Expression::Search(
-                    Search::RegexSet(
-                        RegexSetBuilder::new(patterns)
-                            .case_insensitive(insensitive)
-                            .build()
-                            .expect("could not build regex"),
-                        insensitive,
-                    ),
-                    f,
-                    c,
-                )
+
+                for ((field, cast, insensitive), searches) in needles {
+                    if !insensitive && searches.len() == 1 {
+                        let search = searches.into_iter().next().expect("could not get search");
+                        match search.0 {
+                            MatchType::Contains(v) => {
+                                contains.push(Expression::Search(Search::Contains(v), field, cast));
+                            }
+                            MatchType::EndsWith(v) => {
+                                ends_with.push(Expression::Search(
+                                    Search::EndsWith(v),
+                                    field,
+                                    cast,
+                                ));
+                            }
+                            MatchType::Exact(v) => {
+                                exact.push(Expression::Search(Search::Exact(v), field, cast));
+                            }
+                            MatchType::StartsWith(v) => {
+                                starts_with.push(Expression::Search(
+                                    Search::StartsWith(v),
+                                    field,
+                                    cast,
+                                ));
+                            }
+                        };
+                    } else {
+                        let (context, needles): (Vec<_>, Vec<_>) = searches.into_iter().unzip();
+                        let expression = Expression::Search(
+                            Search::AhoCorasick(
+                                Box::new(
+                                    AhoCorasickBuilder::new()
+                                        .dfa(true)
+                                        .ascii_case_insensitive(insensitive)
+                                        .build(needles),
+                                ),
+                                context,
+                                insensitive,
+                            ),
+                            field,
+                            cast,
+                        );
+                        aho.push(expression);
+                    };
+                }
+
+                for (field, expressions) in nested {
+                    let shaken = if expressions.len() == 1 {
+                        shake_1(
+                            expressions
+                                .into_iter()
+                                .next()
+                                .expect("could not get expression"),
+                        )
+                    } else {
+                        shake_1(Expression::BooleanGroup(BoolSym::Or, expressions))
+                    };
+                    rest.push(Expression::Nested(field, Box::new(shaken)));
+                }
+
+                for ((field, cast, insensitive), patterns) in patterns {
+                    if patterns.len() == 1 {
+                        let pattern = patterns.into_iter().next().expect("could not get pattern");
+                        let expression = Expression::Search(
+                            Search::Regex(
+                                RegexBuilder::new(&pattern)
+                                    .case_insensitive(insensitive)
+                                    .build()
+                                    .expect("could not build regex"),
+                                insensitive,
+                            ),
+                            field,
+                            cast,
+                        );
+                        regex.push(expression);
+                    } else {
+                        let expression = Expression::Search(
+                            Search::RegexSet(
+                                RegexSetBuilder::new(patterns)
+                                    .case_insensitive(insensitive)
+                                    .build()
+                                    .expect("could not build regex set"),
+                                insensitive,
+                            ),
+                            field,
+                            cast,
+                        );
+                        regex_set.push(expression);
+                    }
+                }
+
+                let mut scratch = vec![];
+                scratch.extend(any);
+                exact.sort_by(|x, y| match (x, y) {
+                    (
+                        Expression::Search(Search::Exact(a), _, _),
+                        Expression::Search(Search::Exact(b), _, _),
+                    ) => a.len().cmp(&b.len()),
+                    _ => std::cmp::Ordering::Equal,
+                });
+                scratch.extend(exact);
+                starts_with.sort_by(|x, y| match (x, y) {
+                    (
+                        Expression::Search(Search::StartsWith(a), _, _),
+                        Expression::Search(Search::StartsWith(b), _, _),
+                    ) => a.len().cmp(&b.len()),
+                    _ => std::cmp::Ordering::Equal,
+                });
+                scratch.extend(starts_with);
+                ends_with.sort_by(|x, y| match (x, y) {
+                    (
+                        Expression::Search(Search::EndsWith(a), _, _),
+                        Expression::Search(Search::EndsWith(b), _, _),
+                    ) => a.len().cmp(&b.len()),
+                    _ => std::cmp::Ordering::Equal,
+                });
+                scratch.extend(ends_with);
+                contains.sort_by(|x, y| match (x, y) {
+                    (
+                        Expression::Search(Search::Contains(a), _, _),
+                        Expression::Search(Search::Contains(b), _, _),
+                    ) => a.len().cmp(&b.len()),
+                    _ => std::cmp::Ordering::Equal,
+                });
+                scratch.extend(contains);
+                aho.sort_by(|x, y| match (x, y) {
+                    (
+                        Expression::Search(Search::AhoCorasick(_, a, case0), _, _),
+                        Expression::Search(Search::AhoCorasick(_, b, case1), _, _),
+                    ) => (b.len(), case1).cmp(&(a.len(), case0)),
+                    _ => std::cmp::Ordering::Equal,
+                });
+                scratch.extend(aho);
+                regex.sort_by(|x, y| match (x, y) {
+                    (
+                        Expression::Search(Search::Regex(reg0, case0), _, _),
+                        Expression::Search(Search::Regex(reg1, case1), _, _),
+                    ) => (reg0.as_str(), case0).cmp(&(reg1.as_str(), case1)),
+                    _ => std::cmp::Ordering::Equal,
+                });
+                scratch.extend(regex);
+                regex_set.sort_by(|x, y| match (x, y) {
+                    (
+                        Expression::Search(Search::RegexSet(set0, case0), _, _),
+                        Expression::Search(Search::RegexSet(set1, case1), _, _),
+                    ) => (set0.patterns(), case0).cmp(&(set1.patterns(), case1)),
+                    _ => std::cmp::Ordering::Equal,
+                });
+                scratch.extend(regex_set);
+                scratch.extend(rest);
+                scratch
+            };
+            if expressions.len() != length {
+                shake_1(Expression::BooleanGroup(BoolSym::Or, expressions))
+            } else if expressions.len() == 1 {
+                expressions
+                    .into_iter()
+                    .next()
+                    .expect("could not get expression")
             } else {
-                Expression::Search(Search::RegexSet(regex, insensitive), f, c)
+                Expression::BooleanGroup(BoolSym::Or, expressions)
             }
+        }
+        Expression::BooleanGroup(symbol, expressions) => {
+            let mut scratch = vec![];
+            for expression in expressions {
+                scratch.push(shake_1(expression));
+            }
+            Expression::BooleanGroup(symbol, scratch)
+        }
+        Expression::BooleanExpression(left, symbol, right) => {
+            let left = shake_1(*left);
+            let right = shake_1(*right);
+            Expression::BooleanExpression(Box::new(left), symbol, Box::new(right))
+        }
+        Expression::Match(kind, expression) => match *expression {
+            Expression::BooleanGroup(symbol, expressions) => {
+                let mut scratch = vec![];
+                for expression in expressions {
+                    scratch.push(shake_1(expression));
+                }
+                Expression::Match(kind, Box::new(Expression::BooleanGroup(symbol, scratch)))
+            }
+            expression => Expression::Match(kind, Box::new(shake_1(expression))),
+        },
+        Expression::Negate(expression) => Expression::Negate(Box::new(shake_1(*expression))),
+        Expression::Nested(field, expression) => {
+            Expression::Nested(field, Box::new(shake_1(*expression)))
         }
         Expression::Boolean(_)
         | Expression::Cast(_, _)
@@ -814,44 +970,24 @@ mod tests {
         assert_eq!(coalesced, expected);
     }
 
-    #[test]
-    fn shake_and_nots() {
-        let expression = Expression::BooleanExpression(
-            Box::new(Expression::Negate(Box::new(Expression::Null))),
-            BoolSym::And,
-            Box::new(Expression::Negate(Box::new(Expression::Null))),
-        );
-        let shaken = shake(expression, false);
+    // FIXME: Disabled for now...
+    //#[test]
+    //fn shake_and_nots() {
+    //    let expression = Expression::BooleanExpression(
+    //        Box::new(Expression::Negate(Box::new(Expression::Null))),
+    //        BoolSym::And,
+    //        Box::new(Expression::Negate(Box::new(Expression::Null))),
+    //    );
+    //    let shaken = shake(expression);
 
-        let expected = Expression::Negate(Box::new(Expression::BooleanExpression(
-            Box::new(Expression::Null),
-            BoolSym::Or,
-            Box::new(Expression::Null),
-        )));
+    //    let expected = Expression::Negate(Box::new(Expression::BooleanExpression(
+    //        Box::new(Expression::Null),
+    //        BoolSym::Or,
+    //        Box::new(Expression::Null),
+    //    )));
 
-        assert_eq!(shaken, expected);
-
-        let expression = Expression::BooleanExpression(
-            Box::new(Expression::Negate(Box::new(Expression::Null))),
-            BoolSym::And,
-            Box::new(Expression::BooleanExpression(
-                Box::new(Expression::Negate(Box::new(Expression::Null))),
-                BoolSym::And,
-                Box::new(Expression::Negate(Box::new(Expression::Null))),
-            )),
-        );
-        let shaken = shake(expression, false);
-
-        let expected = Expression::Match(
-            Match::Of(0),
-            Box::new(Expression::BooleanGroup(
-                BoolSym::Or,
-                vec![Expression::Null, Expression::Null, Expression::Null],
-            )),
-        );
-
-        assert_eq!(shaken, expected);
-    }
+    //    assert_eq!(shaken, expected);
+    //}
 
     #[test]
     fn shake_ands() {
@@ -860,7 +996,7 @@ mod tests {
             BoolSym::And,
             Box::new(Expression::Null),
         );
-        let shaken = shake(expression, false);
+        let shaken = shake(expression);
 
         let expected = Expression::BooleanExpression(
             Box::new(Expression::Null),
@@ -879,7 +1015,7 @@ mod tests {
                 Box::new(Expression::Null),
             )),
         );
-        let shaken = shake(expression, false);
+        let shaken = shake(expression);
 
         let expected = Expression::BooleanGroup(
             BoolSym::And,
@@ -896,7 +1032,7 @@ mod tests {
             BoolSym::Or,
             Box::new(Expression::Null),
         );
-        let shaken = shake(expression, false);
+        let shaken = shake(expression);
 
         let expected = Expression::BooleanExpression(
             Box::new(Expression::Null),
@@ -915,7 +1051,7 @@ mod tests {
                 Box::new(Expression::Null),
             )),
         );
-        let shaken = shake(expression, false);
+        let shaken = shake(expression);
 
         let expected = Expression::BooleanGroup(
             BoolSym::Or,
@@ -956,7 +1092,7 @@ mod tests {
                 ),
             ],
         );
-        let shaken = shake(expression, false);
+        let shaken = shake(expression);
 
         let expected = Expression::Nested(
             "ids".to_owned(),
@@ -1095,7 +1231,7 @@ mod tests {
                 ),
             ],
         );
-        let shaken = shake(expression, false);
+        let shaken = shake(expression);
 
         let expected = Expression::BooleanGroup(
             BoolSym::Or,
@@ -1193,7 +1329,7 @@ mod tests {
     fn shake_group_or_1() {
         // NOTE: This is not a solvable expression but tests what we need testing
         let expression = Expression::BooleanGroup(BoolSym::Or, vec![Expression::Null]);
-        let shaken = shake(expression, false);
+        let shaken = shake(expression);
 
         let expected = Expression::Null;
 
@@ -1225,7 +1361,7 @@ mod tests {
                 ],
             )),
         );
-        let shaken = shake(expression, false);
+        let shaken = shake(expression);
 
         let expected = Expression::Nested(
             "ids".to_owned(),
@@ -1260,7 +1396,7 @@ mod tests {
                 vec![Expression::Null, Expression::Null],
             )),
         );
-        let shaken = shake(expression, false);
+        let shaken = shake(expression);
 
         let expected = Expression::Match(
             Match::All,
@@ -1277,7 +1413,7 @@ mod tests {
     fn shake_negate() {
         let expression =
             Expression::Negate(Box::new(Expression::Negate(Box::new(Expression::Null))));
-        let shaken = shake(expression, false);
+        let shaken = shake(expression);
 
         let expected = Expression::Null;
 
@@ -1291,7 +1427,7 @@ mod tests {
             "name".to_owned(),
             false,
         );
-        let shaken = shake(expression, true);
+        let rewriten = rewrite(expression);
 
         let expected = Expression::Search(
             Search::Regex(RegexBuilder::new("foo").build().unwrap(), false),
@@ -1299,7 +1435,7 @@ mod tests {
             false,
         );
 
-        assert_eq!(shaken, expected);
+        assert_eq!(rewriten, expected);
 
         let expression = Expression::Search(
             Search::RegexSet(
@@ -1309,7 +1445,7 @@ mod tests {
             "name".to_owned(),
             false,
         );
-        let shaken = shake(expression, true);
+        let rewriten = rewrite(expression);
 
         let expected = Expression::Search(
             Search::RegexSet(RegexSetBuilder::new(vec!["foo"]).build().unwrap(), false),
@@ -1317,7 +1453,7 @@ mod tests {
             false,
         );
 
-        assert_eq!(shaken, expected);
+        assert_eq!(rewriten, expected);
     }
 
     #[test]
@@ -1338,7 +1474,7 @@ mod tests {
             BoolSym::And,
             Box::new(Expression::Negate(Box::new(Expression::Null))),
         );
-        let shaken = shake(expression, true);
+        let shaken = shake(expression);
 
         let expected = Expression::BooleanExpression(
             Box::new(Expression::BooleanExpression(
@@ -1373,7 +1509,7 @@ mod tests {
                 ],
             )],
         )));
-        let shaken = shake(expression, true);
+        let shaken = shake(expression);
 
         let expected = Expression::Negate(Box::new(Expression::BooleanGroup(
             BoolSym::And,

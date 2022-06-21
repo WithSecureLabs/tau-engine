@@ -183,6 +183,7 @@ impl RuleLoader {
         // FIXME: If we debug with these there will be confusion, as the raw values will be
         // incorrect.
         let mut detection = rule.detection;
+        let optimised = self.optimise.is_some();
         if let Some(optimise) = self.optimise {
             if optimise.coalesce {
                 detection.expression =
@@ -190,11 +191,19 @@ impl RuleLoader {
                 detection.identifiers.clear();
             }
             if optimise.shake {
-                detection.expression = optimiser::shake(detection.expression, optimise.rewrite);
+                detection.expression = optimiser::shake(detection.expression);
                 detection.identifiers = detection
                     .identifiers
                     .into_iter()
-                    .map(|(k, v)| (k, optimiser::shake(v, optimise.rewrite)))
+                    .map(|(k, v)| (k, optimiser::shake(v)))
+                    .collect();
+            }
+            if optimise.rewrite {
+                detection.expression = optimiser::rewrite(detection.expression);
+                detection.identifiers = detection
+                    .identifiers
+                    .into_iter()
+                    .map(|(k, v)| (k, optimiser::rewrite(v)))
                     .collect();
             }
             if optimise.matrix {
@@ -207,6 +216,7 @@ impl RuleLoader {
             }
         }
         Ok(Rule {
+            optimised,
             detection,
             true_negatives: rule.true_negatives,
             true_positives: rule.true_positives,
@@ -219,6 +229,7 @@ impl RuleLoader {
         // FIXME: If we debug with these there will be confusion, as the raw values will be
         // incorrect.
         let mut detection = rule.detection;
+        let optimised = self.optimise.is_some();
         if let Some(optimise) = self.optimise {
             if optimise.coalesce {
                 detection.expression =
@@ -226,11 +237,19 @@ impl RuleLoader {
                 detection.identifiers.clear();
             }
             if optimise.shake {
-                detection.expression = optimiser::shake(detection.expression, optimise.rewrite);
+                detection.expression = optimiser::shake(detection.expression);
                 detection.identifiers = detection
                     .identifiers
                     .into_iter()
-                    .map(|(k, v)| (k, optimiser::shake(v, optimise.rewrite)))
+                    .map(|(k, v)| (k, optimiser::shake(v)))
+                    .collect();
+            }
+            if optimise.rewrite {
+                detection.expression = optimiser::rewrite(detection.expression);
+                detection.identifiers = detection
+                    .identifiers
+                    .into_iter()
+                    .map(|(k, v)| (k, optimiser::rewrite(v)))
                     .collect();
             }
             if optimise.matrix {
@@ -243,6 +262,7 @@ impl RuleLoader {
             }
         }
         Ok(Rule {
+            optimised,
             detection,
             true_negatives: rule.true_negatives,
             true_positives: rule.true_positives,
@@ -561,6 +581,9 @@ impl RuleLoader {
 /// ```
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Rule {
+    #[serde(default)]
+    optimised: bool,
+
     pub detection: Detection,
     pub true_positives: Vec<Yaml>,
     pub true_negatives: Vec<Yaml>,
@@ -591,19 +614,30 @@ impl Rule {
 
     /// Optimise the rule with the optimisations provided.
     pub fn optimise(mut self, options: Optimisations) -> Self {
+        if self.optimised {
+            return self;
+        }
         if options.coalesce {
             self.detection.expression =
                 optimiser::coalesce(self.detection.expression, &self.detection.identifiers);
             self.detection.identifiers.clear();
         }
         if options.shake {
-            self.detection.expression =
-                optimiser::shake(self.detection.expression, options.rewrite);
+            self.detection.expression = optimiser::shake(self.detection.expression);
             self.detection.identifiers = self
                 .detection
                 .identifiers
                 .into_iter()
-                .map(|(k, v)| (k, optimiser::shake(v, options.rewrite)))
+                .map(|(k, v)| (k, optimiser::shake(v)))
+                .collect();
+        }
+        if options.rewrite {
+            self.detection.expression = optimiser::rewrite(self.detection.expression);
+            self.detection.identifiers = self
+                .detection
+                .identifiers
+                .into_iter()
+                .map(|(k, v)| (k, optimiser::rewrite(v)))
                 .collect();
         }
         if options.matrix {
@@ -615,6 +649,7 @@ impl Rule {
                 .map(|(k, v)| (k, optimiser::matrix(v)))
                 .collect();
         }
+        self.optimised = true;
         self
     }
 

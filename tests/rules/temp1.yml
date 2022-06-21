@@ -1,0 +1,25 @@
+---
+detection:
+  condition: selection_service
+  selection_service:
+    Provider_Name: "'iService Control Manager'"
+    EventID: 7045
+    ServiceName:
+      - "'iSC Scheduled Scan'"
+      - iUpdatMachine
+
+true_positives:
+  - Provider_Name: iService Control Manager
+    EventID: 7045
+    ServiceName: iSC Scheduled Scan
+
+true_negatives:
+  - Provider_Name: iService Control Managerr
+    EventID: 7045
+    ServiceName: iSC Scheduled Scan
+  - Provider_Name: iService Control Manager
+    EventID: 7046
+    ServiceName: iSC Scheduled Scan
+  - Provider_Name: iService Control Manager
+    EventID: 7045
+    ServiceName: iSC Scheduled Scann

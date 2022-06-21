@@ -1,17 +1,37 @@
 mod common;
 
+fn print_rule(rule: &tau_engine::Rule) {
+    println!("condition: {}", rule.detection.expression);
+    let mut keys = rule
+        .detection
+        .identifiers
+        .keys()
+        .cloned()
+        .collect::<Vec<_>>();
+    keys.sort();
+    for key in &keys {
+        println!(
+            "\t{}: {}",
+            key,
+            rule.detection.identifiers.get(key).unwrap()
+        );
+    }
+}
+
 macro_rules! solve_rule {
     ($rule:expr) => {
         paste::item! {
             #[test]
             fn [< solve_ $rule >] () {
                 let rule = common::load_rule($rule).expect("invalid rule");
+                print_rule(&rule);
                 assert_eq!(rule.validate().unwrap(), true);
             }
 
             #[test]
             fn [< solve_ $rule _optimised >] () {
                 let rule = common::load_optimised_rule($rule).expect("invalid rule");
+                print_rule(&rule);
                 assert_eq!(rule.validate().unwrap(), true);
             }
         }
@@ -40,7 +60,9 @@ solve_rule!("integer");
 solve_rule!("many_ands");
 solve_rule!("many_and_nots");
 solve_rule!("match_all");
+solve_rule!("match_all_duplicate");
 solve_rule!("match_all_identifier");
+solve_rule!("match_all_matrix");
 solve_rule!("match_of_0");
 solve_rule!("match_of_1");
 solve_rule!("match_of_2");

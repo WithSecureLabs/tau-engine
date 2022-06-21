@@ -19,6 +19,14 @@ impl<'a> Document for Cache<'a> {
     }
 }
 
+struct Passthrough<'a>(Option<Value<'a>>);
+
+impl<'a> Document for Passthrough<'a> {
+    fn find(&self, _: &str) -> Option<Value> {
+        self.0.clone()
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub(crate) enum SolverResult {
     True,
@@ -455,14 +463,14 @@ pub(crate) fn solve_expression(
             let (_, group) = match **e {
                 Expression::Identifier(ref i) => match identifiers.get(i) {
                     Some(Expression::BooleanGroup(o, g)) => (o, g),
-                    Some(e) => return solve_expression(e, identifiers, document),
+                    Some(e) => return match_all(e, identifiers, document),
                     _ => unreachable!(),
                 },
                 Expression::BooleanGroup(ref o, ref g) => (o, g),
                 _ => return match_all(e, identifiers, document),
             };
             for expression in group {
-                match match_all(expression, identifiers, document) {
+                match solve_expression(expression, identifiers, document) {
                     SolverResult::True => {}
                     SolverResult::False => return SolverResult::False,
                     SolverResult::Missing => return SolverResult::Missing,
@@ -474,49 +482,13 @@ pub(crate) fn solve_expression(
             let (_, group) = match **e {
                 Expression::Identifier(ref identifier) => match identifiers.get(identifier) {
                     Some(Expression::BooleanGroup(o, g)) => (o, g),
-                    Some(e) => {
-                        return match solve_expression(e, identifiers, document) {
-                            SolverResult::True => {
-                                if c == 0 {
-                                    SolverResult::False
-                                } else {
-                                    SolverResult::True
-                                }
-                            }
-                            SolverResult::False => {
-                                if c == 0 {
-                                    SolverResult::True
-                                } else {
-                                    SolverResult::False
-                                }
-                            }
-                            SolverResult::Missing => SolverResult::Missing,
-                        }
-                    }
+                    Some(e) => return match_of(e, identifiers, document, c),
                     _ => {
                         unreachable!();
                     }
                 },
                 Expression::BooleanGroup(ref o, ref g) => (o, g),
-                _ => {
-                    return match solve_expression(e, identifiers, document) {
-                        SolverResult::True => {
-                            if c == 0 {
-                                SolverResult::False
-                            } else {
-                                SolverResult::True
-                            }
-                        }
-                        SolverResult::False => {
-                            if c == 0 {
-                                SolverResult::True
-                            } else {
-                                SolverResult::False
-                            }
-                        }
-                        SolverResult::Missing => SolverResult::Missing,
-                    };
-                }
+                _ => return match_of(e, identifiers, document, c),
             };
             let mut count = 0;
             let mut res = SolverResult::Missing;
@@ -528,182 +500,6 @@ pub(crate) fn solve_expression(
                             res = SolverResult::True;
                         }
                         SolverResult::Missing => {}
-                    }
-                // NOTE: Because of needle optimisation we have to handle aho in a `slow` fashion here...
-                } else if let Expression::Search(Search::AhoCorasick(a, m, _), i, cast) = expression
-                {
-                    let value = match document.find(i) {
-                        Some(v) => v,
-                        None => {
-                            debug!("evaluating missing, field not found for {}", expression);
-                            return SolverResult::Missing;
-                        }
-                    };
-                    match (value, cast) {
-                        (Value::String(ref x), _) => {
-                            count += slow_aho(a, m, x);
-                            if count >= c {
-                                return SolverResult::True;
-                            }
-                        }
-                        (Value::Array(x), _) => {
-                            let mut max = 0;
-                            for v in x.iter() {
-                                if let Some(x) = v.as_str() {
-                                    let hits = slow_aho(a, m, x);
-                                    if count + hits >= c {
-                                        return SolverResult::True;
-                                    } else if hits > max {
-                                        max = hits;
-                                    }
-                                } else if *cast {
-                                    let x = match v {
-                                        Value::Bool(x) => x.to_string(),
-                                        Value::Float(x) => x.to_string(),
-                                        Value::Int(x) => x.to_string(),
-                                        Value::UInt(x) => x.to_string(),
-                                        _ => continue,
-                                    };
-                                    let hits = slow_aho(a, m, x.as_str());
-                                    if count + hits >= c {
-                                        return SolverResult::True;
-                                    } else if hits > max {
-                                        max = hits;
-                                    }
-                                }
-                            }
-                            count += max;
-                        }
-                        (Value::Bool(x), true) => {
-                            let x = x.to_string();
-                            count += slow_aho(a, m, x.as_str());
-                            if count >= c {
-                                return SolverResult::True;
-                            }
-                        }
-                        (Value::Float(x), true) => {
-                            let x = x.to_string();
-                            count += slow_aho(a, m, x.as_str());
-                            if count >= c {
-                                return SolverResult::True;
-                            }
-                        }
-                        (Value::Int(x), true) => {
-                            let x = x.to_string();
-                            count += slow_aho(a, m, x.as_str());
-                            if count >= c {
-                                return SolverResult::True;
-                            }
-                        }
-                        (Value::UInt(x), true) => {
-                            let x = x.to_string();
-                            count += slow_aho(a, m, x.as_str());
-                            if count >= c {
-                                return SolverResult::True;
-                            }
-                        }
-                        _ => {
-                            debug!(
-                                "evaluating false, field is not an array of strings, or a string for {}",
-                                expression
-                            );
-                            return SolverResult::Missing;
-                        }
-                    }
-                } else if let Expression::Search(Search::RegexSet(s, _), i, cast) = expression {
-                    let value = match document.find(i) {
-                        Some(v) => v,
-                        None => {
-                            debug!("evaluating missing, field not found for {}", expression);
-                            return SolverResult::Missing;
-                        }
-                    };
-                    match (value, cast) {
-                        (Value::String(ref x), _) => {
-                            for _ in s.matches(x).iter() {
-                                count += 1;
-                            }
-                            if count >= c {
-                                return SolverResult::True;
-                            }
-                        }
-                        (Value::Array(x), _) => {
-                            let mut max = 0;
-                            for v in x.iter() {
-                                if let Some(x) = v.as_str() {
-                                    let mut hits = 0;
-                                    for _ in s.matches(x).iter() {
-                                        hits += 1;
-                                    }
-                                    if count + hits >= c {
-                                        return SolverResult::True;
-                                    } else if hits > max {
-                                        max = hits;
-                                    }
-                                } else if *cast {
-                                    let x = match v {
-                                        Value::Bool(x) => x.to_string(),
-                                        Value::Float(x) => x.to_string(),
-                                        Value::Int(x) => x.to_string(),
-                                        Value::UInt(x) => x.to_string(),
-                                        _ => continue,
-                                    };
-                                    let mut hits = 0;
-                                    for _ in s.matches(x.as_str()).iter() {
-                                        hits += 1;
-                                    }
-                                    if count + hits >= c {
-                                        return SolverResult::True;
-                                    } else if hits > max {
-                                        max = hits;
-                                    }
-                                }
-                            }
-                            count += max;
-                        }
-                        (Value::Bool(x), true) => {
-                            let x = x.to_string();
-                            for _ in s.matches(x.as_str()).iter() {
-                                count += 1;
-                            }
-                            if count >= c {
-                                return SolverResult::True;
-                            }
-                        }
-                        (Value::Float(x), true) => {
-                            let x = x.to_string();
-                            for _ in s.matches(x.as_str()).iter() {
-                                count += 1;
-                            }
-                            if count >= c {
-                                return SolverResult::True;
-                            }
-                        }
-                        (Value::Int(x), true) => {
-                            let x = x.to_string();
-                            for _ in s.matches(x.as_str()).iter() {
-                                count += 1;
-                            }
-                            if count >= c {
-                                return SolverResult::True;
-                            }
-                        }
-                        (Value::UInt(x), true) => {
-                            let x = x.to_string();
-                            for _ in s.matches(x.as_str()).iter() {
-                                count += 1;
-                            }
-                            if count >= c {
-                                return SolverResult::True;
-                            }
-                        }
-                        _ => {
-                            debug!(
-                                "evaluating false, field is not an array of strings, or a string for {}",
-                                expression
-                            );
-                            return SolverResult::Missing;
-                        }
                     }
                 } else {
                     match solve_expression(expression, identifiers, document) {
@@ -791,6 +587,69 @@ pub(crate) fn solve_expression(
             match value {
                 Value::Object(o) => solve_expression(e, identifiers, &o),
                 Value::Array(a) => {
+                    if let Expression::Match(Match::All, expression) = &**e {
+                        if let Expression::BooleanGroup(BoolSym::Or, expressions) = &**expression {
+                            for expression in expressions {
+                                let mut res = SolverResult::Missing;
+                                for v in a.iter() {
+                                    if let Some(x) = v.as_object() {
+                                        match solve_expression(expression, identifiers, &x) {
+                                            SolverResult::True => {
+                                                res = SolverResult::True;
+                                                break;
+                                            }
+                                            SolverResult::False => res = SolverResult::False,
+                                            SolverResult::Missing => {}
+                                        }
+                                    }
+                                }
+                                if res != SolverResult::True {
+                                    return res;
+                                }
+                            }
+                            return SolverResult::True;
+                        } else if let Expression::Matrix(columns, rows) = &**expression {
+                            // NOTE: We can't really make use of the optimisations provided by a
+                            // matrix here as we have to loop through the array! For that reason we
+                            // basically null this optimisation...
+                            for row in rows {
+                                let mut res = SolverResult::Missing;
+                                for v in a.iter() {
+                                    let mut hit = SolverResult::True;
+                                    for (i, expression) in row.iter().enumerate() {
+                                        if let Some(expression) = expression {
+                                            if let Some(x) = v.as_object() {
+                                                let value = x.find(&columns[i]);
+                                                match solve_expression(
+                                                    expression,
+                                                    identifiers,
+                                                    &Passthrough(value),
+                                                ) {
+                                                    SolverResult::True => {}
+                                                    SolverResult::False => {
+                                                        hit = SolverResult::False;
+                                                        break;
+                                                    }
+                                                    SolverResult::Missing => {
+                                                        hit = SolverResult::Missing;
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if hit == SolverResult::True {
+                                        res = SolverResult::True;
+                                        break;
+                                    }
+                                }
+                                if res != SolverResult::True {
+                                    return res;
+                                }
+                            }
+                            return SolverResult::True;
+                        }
+                    }
                     for v in a.iter() {
                         if let Some(x) = v.as_object() {
                             if solve_expression(e, identifiers, &x) == SolverResult::True {
@@ -886,7 +745,6 @@ fn match_all(
     identifiers: &HashMap<String, Expression>,
     document: &dyn Document,
 ) -> SolverResult {
-    // NOTE: Because of needle optimisation we have to handle aho in a `slow` fashion here...
     if let Expression::Search(Search::AhoCorasick(a, m, _), i, c) = expression {
         let value = match document.find(i) {
             Some(v) => v,
@@ -1059,14 +917,292 @@ fn match_all(
                 return SolverResult::Missing;
             }
         }
-    } else {
-        match solve_expression(expression, identifiers, document) {
-            SolverResult::True => {}
-            SolverResult::False => return SolverResult::False,
-            SolverResult::Missing => return SolverResult::Missing,
+    } else if let Expression::Matrix(ref columns, ref rows) = expression {
+        // NOTE: Field and search widths must be the same or tau will panic, for now this is
+        // fine as only the optimiser can write this expression, and for those using core it is
+        // on them to ensure they don't break this. There are ways to lock this down and it
+        // could be done in the future...
+        let size = columns.len();
+        let mut cache: Vec<Option<Value>> = Vec::with_capacity(size);
+        for _ in 0..size {
+            cache.push(None);
         }
+        for row in rows {
+            let mut hit = SolverResult::True;
+            for (i, expression) in row.iter().enumerate() {
+                if let Some(expression) = expression {
+                    if cache[i].is_none() {
+                        let value = match document.find(&columns[i]) {
+                            Some(v) => v,
+                            None => {
+                                debug!("evaluating missing, field not found for {}", expression);
+                                hit = SolverResult::Missing;
+                                break;
+                            }
+                        };
+                        let _ = std::mem::replace(&mut cache[i], Some(value));
+                    }
+                    match solve_expression(expression, identifiers, &Cache(&cache)) {
+                        SolverResult::True => {}
+                        SolverResult::False => {
+                            hit = SolverResult::False;
+                            break;
+                        }
+                        SolverResult::Missing => {
+                            hit = SolverResult::Missing;
+                            break;
+                        }
+                    }
+                }
+            }
+            match hit {
+                SolverResult::True => {}
+                SolverResult::False => return SolverResult::False,
+                SolverResult::Missing => return SolverResult::Missing,
+            }
+        }
+    } else {
+        return solve_expression(expression, identifiers, document);
     }
     SolverResult::True
+}
+
+#[inline]
+fn match_of(
+    expression: &Expression,
+    identifiers: &HashMap<String, Expression>,
+    document: &dyn Document,
+    count: u64,
+) -> SolverResult {
+    if count == 0 {
+        return match solve_expression(expression, identifiers, document) {
+            SolverResult::True => SolverResult::False,
+            SolverResult::False => SolverResult::True,
+            SolverResult::Missing => return SolverResult::Missing,
+        };
+    } else if let Expression::Search(Search::AhoCorasick(a, m, _), i, cast) = expression {
+        let value = match document.find(i) {
+            Some(v) => v,
+            None => {
+                debug!("evaluating missing, field not found for {}", expression);
+                return SolverResult::Missing;
+            }
+        };
+        match (value, cast) {
+            (Value::String(ref x), _) => {
+                let c = slow_aho(a, m, x);
+                if c >= count {
+                    return SolverResult::True;
+                }
+            }
+            (Value::Array(x), _) => {
+                for v in x.iter() {
+                    if let Some(x) = v.as_str() {
+                        let hits = slow_aho(a, m, x);
+                        if hits >= count {
+                            return SolverResult::True;
+                        }
+                    } else if *cast {
+                        let x = match v {
+                            Value::Bool(x) => x.to_string(),
+                            Value::Float(x) => x.to_string(),
+                            Value::Int(x) => x.to_string(),
+                            Value::UInt(x) => x.to_string(),
+                            _ => continue,
+                        };
+                        let hits = slow_aho(a, m, x.as_str());
+                        if hits >= count {
+                            return SolverResult::True;
+                        }
+                    }
+                }
+            }
+            (Value::Bool(x), true) => {
+                let x = x.to_string();
+                let c = slow_aho(a, m, x.as_str());
+                if c >= count {
+                    return SolverResult::True;
+                }
+            }
+            (Value::Float(x), true) => {
+                let x = x.to_string();
+                let c = slow_aho(a, m, x.as_str());
+                if c >= count {
+                    return SolverResult::True;
+                }
+            }
+            (Value::Int(x), true) => {
+                let x = x.to_string();
+                let c = slow_aho(a, m, x.as_str());
+                if c >= count {
+                    return SolverResult::True;
+                }
+            }
+            (Value::UInt(x), true) => {
+                let x = x.to_string();
+                let c = slow_aho(a, m, x.as_str());
+                if c >= count {
+                    return SolverResult::True;
+                }
+            }
+            _ => {
+                debug!(
+                    "evaluating false, field is not an array of strings, or a string for {}",
+                    expression
+                );
+                return SolverResult::Missing;
+            }
+        }
+    } else if let Expression::Search(Search::RegexSet(s, _), i, cast) = expression {
+        let value = match document.find(i) {
+            Some(v) => v,
+            None => {
+                debug!("evaluating missing, field not found for {}", expression);
+                return SolverResult::Missing;
+            }
+        };
+        match (value, cast) {
+            (Value::String(ref x), _) => {
+                let mut c = 0;
+                for _ in s.matches(x).iter() {
+                    c += 1;
+                }
+                if c >= count {
+                    return SolverResult::True;
+                }
+            }
+            (Value::Array(x), _) => {
+                for v in x.iter() {
+                    if let Some(x) = v.as_str() {
+                        let mut hits = 0;
+                        for _ in s.matches(x).iter() {
+                            hits += 1;
+                        }
+                        if hits >= count {
+                            return SolverResult::True;
+                        }
+                    } else if *cast {
+                        let x = match v {
+                            Value::Bool(x) => x.to_string(),
+                            Value::Float(x) => x.to_string(),
+                            Value::Int(x) => x.to_string(),
+                            Value::UInt(x) => x.to_string(),
+                            _ => continue,
+                        };
+                        let mut hits = 0;
+                        for _ in s.matches(x.as_str()).iter() {
+                            hits += 1;
+                        }
+                        if hits >= count {
+                            return SolverResult::True;
+                        }
+                    }
+                }
+            }
+            (Value::Bool(x), true) => {
+                let x = x.to_string();
+                let mut c = 0;
+                for _ in s.matches(x.as_str()).iter() {
+                    c += 1;
+                }
+                if c >= count {
+                    return SolverResult::True;
+                }
+            }
+            (Value::Float(x), true) => {
+                let x = x.to_string();
+                let mut c = 0;
+                for _ in s.matches(x.as_str()).iter() {
+                    c += 1;
+                }
+                if c >= count {
+                    return SolverResult::True;
+                }
+            }
+            (Value::Int(x), true) => {
+                let x = x.to_string();
+                let mut c = 0;
+                for _ in s.matches(x.as_str()).iter() {
+                    c += 1;
+                }
+                if c >= count {
+                    return SolverResult::True;
+                }
+            }
+            (Value::UInt(x), true) => {
+                let x = x.to_string();
+                let mut c = 0;
+                for _ in s.matches(x.as_str()).iter() {
+                    c += 1;
+                }
+                if c >= count {
+                    return SolverResult::True;
+                }
+            }
+            _ => {
+                debug!(
+                    "evaluating false, field is not an array of strings, or a string for {}",
+                    expression
+                );
+                return SolverResult::Missing;
+            }
+        }
+    } else if let Expression::Matrix(ref columns, ref rows) = expression {
+        // NOTE: Field and search widths must be the same or tau will panic, for now this is
+        // fine as only the optimiser can write this expression, and for those using core it is
+        // on them to ensure they don't break this. There are ways to lock this down and it
+        // could be done in the future...
+        let size = columns.len();
+        let mut cache: Vec<Option<Value>> = Vec::with_capacity(size);
+        for _ in 0..size {
+            cache.push(None);
+        }
+        let mut hits = 0;
+        let mut res = SolverResult::Missing;
+        for row in rows {
+            let mut hit = SolverResult::True;
+            for (i, expression) in row.iter().enumerate() {
+                if let Some(expression) = expression {
+                    if cache[i].is_none() {
+                        let value = match document.find(&columns[i]) {
+                            Some(v) => v,
+                            None => {
+                                debug!("evaluating missing, field not found for {}", expression);
+                                hit = SolverResult::Missing;
+                                break;
+                            }
+                        };
+                        let _ = std::mem::replace(&mut cache[i], Some(value));
+                    }
+                    match solve_expression(expression, identifiers, &Cache(&cache)) {
+                        SolverResult::True => {}
+                        SolverResult::False => {
+                            hit = SolverResult::False;
+                            break;
+                        }
+                        SolverResult::Missing => {
+                            hit = SolverResult::Missing;
+                            break;
+                        }
+                    }
+                }
+            }
+            match hit {
+                SolverResult::True => {
+                    hits += 1;
+                    if hits >= count {
+                        return SolverResult::True;
+                    }
+                }
+                SolverResult::False => res = SolverResult::False,
+                SolverResult::Missing => {}
+            }
+        }
+        return res;
+    } else {
+        return solve_expression(expression, identifiers, document);
+    }
+    SolverResult::False
 }
 
 #[inline]
