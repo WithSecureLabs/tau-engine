@@ -10,10 +10,7 @@ pub fn load_rule(prefix: &str, name: &str) -> Rule {
     };
     let root = env!("CARGO_MANIFEST_DIR");
     let path = Path::new(root).join(prefix).join("rules").join(rule);
-    Rule::loader()
-        .optimise(None)
-        .load(&path)
-        .expect("invalid rule")
+    Rule::load(&path).expect("invalid rule")
 }
 
 pub fn load_optimised_rule(prefix: &str, name: &str) -> Rule {
@@ -24,8 +21,7 @@ pub fn load_optimised_rule(prefix: &str, name: &str) -> Rule {
     };
     let root = env!("CARGO_MANIFEST_DIR");
     let path = Path::new(root).join(prefix).join("rules").join(rule);
-    Rule::loader()
-        .optimise(Some(Default::default()))
-        .load(&path)
+    Rule::load(&path)
         .expect("invalid rule")
+        .optimise(Default::default())
 }

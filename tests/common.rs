@@ -10,12 +10,12 @@ pub fn load_rule(name: &str) -> Result<Rule, Error> {
     };
     let root = env!("CARGO_MANIFEST_DIR");
     let path = Path::new(root).join("tests/rules").join(rule);
-    Rule::loader().optimise(None).load(&path)
+    Rule::load(&path)
 }
 
 // NOTE: Warns about being dead event though it is not...
 #[allow(dead_code)]
-pub fn load_optimised_rule(name: &str) -> Result<Rule, Error> {
+pub fn load_optimised_rule(name: &str) -> Rule {
     let rule = if name.ends_with(".yml") {
         name.to_owned()
     } else {
@@ -23,7 +23,7 @@ pub fn load_optimised_rule(name: &str) -> Result<Rule, Error> {
     };
     let root = env!("CARGO_MANIFEST_DIR");
     let path = Path::new(root).join("tests/rules").join(rule);
-    Rule::loader()
-        .optimise(Some(Default::default()))
-        .load(&path)
+    Rule::load(&path)
+        .expect("invalid rule")
+        .optimise(Default::default())
 }

@@ -30,7 +30,7 @@ macro_rules! solve_rule {
 
             #[test]
             fn [< solve_ $rule _optimised >] () {
-                let rule = common::load_optimised_rule($rule).expect("invalid rule");
+                let rule = common::load_optimised_rule($rule);
                 print_rule(&rule);
                 assert_eq!(rule.validate().unwrap(), true);
             }

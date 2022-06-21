@@ -152,132 +152,6 @@ impl<'de> Deserialize<'de> for Detection {
     }
 }
 
-// TODO: Should probably just remove this and have an optimise on the Rule where we parse optimise
-// options...
-/// A `RuleLoader` can be used to create a `Rule` with custom configuration.
-pub struct RuleLoader {
-    optimise: Option<Optimisations>,
-}
-
-impl Default for RuleLoader {
-    fn default() -> Self {
-        Self { optimise: None }
-    }
-}
-
-impl RuleLoader {
-    /// Create a new loader for configuring how a Rule is loaded.
-    pub fn new() -> Self {
-        RuleLoader::default()
-    }
-
-    /// Loads the rule using the configuration set on the loader.
-    pub fn load(self, path: &Path) -> crate::Result<Rule> {
-        let contents = fs::read_to_string(path).map_err(crate::error::rule_invalid)?;
-        self.from_str(&contents)
-    }
-
-    /// Loads the rule from a YAML string using the configuration set on the loader.
-    pub fn from_str(self, s: &str) -> crate::Result<Rule> {
-        let rule: Rule = serde_yaml::from_str(s).map_err(crate::error::rule_invalid)?;
-        // FIXME: If we debug with these there will be confusion, as the raw values will be
-        // incorrect.
-        let mut detection = rule.detection;
-        let optimised = self.optimise.is_some();
-        if let Some(optimise) = self.optimise {
-            if optimise.coalesce {
-                detection.expression =
-                    optimiser::coalesce(detection.expression, &detection.identifiers);
-                detection.identifiers.clear();
-            }
-            if optimise.shake {
-                detection.expression = optimiser::shake(detection.expression);
-                detection.identifiers = detection
-                    .identifiers
-                    .into_iter()
-                    .map(|(k, v)| (k, optimiser::shake(v)))
-                    .collect();
-            }
-            if optimise.rewrite {
-                detection.expression = optimiser::rewrite(detection.expression);
-                detection.identifiers = detection
-                    .identifiers
-                    .into_iter()
-                    .map(|(k, v)| (k, optimiser::rewrite(v)))
-                    .collect();
-            }
-            if optimise.matrix {
-                detection.expression = optimiser::matrix(detection.expression);
-                detection.identifiers = detection
-                    .identifiers
-                    .into_iter()
-                    .map(|(k, v)| (k, optimiser::matrix(v)))
-                    .collect();
-            }
-        }
-        Ok(Rule {
-            optimised,
-            detection,
-            true_negatives: rule.true_negatives,
-            true_positives: rule.true_positives,
-        })
-    }
-
-    /// Loads the rule from a YAML string using the configuration set on the loader.
-    pub fn from_value(self, value: serde_yaml::Value) -> crate::Result<Rule> {
-        let rule: Rule = serde_yaml::from_value(value).map_err(crate::error::rule_invalid)?;
-        // FIXME: If we debug with these there will be confusion, as the raw values will be
-        // incorrect.
-        let mut detection = rule.detection;
-        let optimised = self.optimise.is_some();
-        if let Some(optimise) = self.optimise {
-            if optimise.coalesce {
-                detection.expression =
-                    optimiser::coalesce(detection.expression, &detection.identifiers);
-                detection.identifiers.clear();
-            }
-            if optimise.shake {
-                detection.expression = optimiser::shake(detection.expression);
-                detection.identifiers = detection
-                    .identifiers
-                    .into_iter()
-                    .map(|(k, v)| (k, optimiser::shake(v)))
-                    .collect();
-            }
-            if optimise.rewrite {
-                detection.expression = optimiser::rewrite(detection.expression);
-                detection.identifiers = detection
-                    .identifiers
-                    .into_iter()
-                    .map(|(k, v)| (k, optimiser::rewrite(v)))
-                    .collect();
-            }
-            if optimise.matrix {
-                detection.expression = optimiser::matrix(detection.expression);
-                detection.identifiers = detection
-                    .identifiers
-                    .into_iter()
-                    .map(|(k, v)| (k, optimiser::matrix(v)))
-                    .collect();
-            }
-        }
-        Ok(Rule {
-            optimised,
-            detection,
-            true_negatives: rule.true_negatives,
-            true_positives: rule.true_positives,
-        })
-    }
-
-    /// Allow Tau to optimise the rule when loaded.
-    ///
-    /// This option is disabled by default.
-    pub fn optimise(mut self, options: Option<Optimisations>) -> Self {
-        self.optimise = options;
-        self
-    }
-}
-
 /// A rule used by the solver to evaluate a `Document`.
 ///
 /// A rule contains the detection logic, along with the true positive and negative tests. The
@@ -590,26 +464,20 @@ pub struct Rule {
 }
 
 impl Rule {
-    /// Creates a `RuleLoader` to configure a `Rule`.
-    ///
-    /// This is the same as `RuleLoader::new()`.
-    pub fn loader() -> RuleLoader {
-        RuleLoader::default()
-    }
-
     /// Load a rule from a YAML file.
     pub fn load(path: &Path) -> crate::Result<Self> {
-        RuleLoader::new().load(path)
+        let contents = fs::read_to_string(path).map_err(crate::error::rule_invalid)?;
+        Self::from_str(&contents)
     }
 
     /// Load a rule from a YAML string.
     pub fn from_str(s: &str) -> crate::Result<Self> {
-        RuleLoader::new().from_str(s)
+        serde_yaml::from_str(s).map_err(crate::error::rule_invalid)
     }
 
     /// Load a rule from a YAML Value.
     pub fn from_value(value: serde_yaml::Value) -> crate::Result<Self> {
-        RuleLoader::new().from_value(value)
+        serde_yaml::from_value(value).map_err(crate::error::rule_invalid)
     }
 
     /// Optimise the rule with the optimisations provided.
