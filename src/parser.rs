@@ -1512,6 +1512,11 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                     Expression::BooleanGroup(BoolSym::Or, group)
                 }
             }
+            Yaml::Tagged(_) => {
+                return Err(crate::error::parse_invalid_ident(
+                    "!Tag syntax is not supported",
+                ));
+            }
         };
         if let Some(ModSym::Not) = misc {
             expressions.push(Expression::Negate(Box::new(expression)));

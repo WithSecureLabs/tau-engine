@@ -26,6 +26,7 @@ impl AsValue for Yaml {
             Self::Bool(b) => Value::Bool(*b),
             Self::Mapping(o) => Value::Object(o),
             Self::Sequence(s) => Value::Array(s),
+            Self::Tagged(t) => t.value.as_value(),
         }
     }
 }
