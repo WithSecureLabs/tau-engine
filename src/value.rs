@@ -540,16 +540,12 @@ pub trait Object {
         let mut v: Option<Value<'_>> = None;
         for k in key.split('.') {
             match v {
-                Some(value) => match value {
-                    Value::Object(value) => v = value.get(k),
-                    _ => return None,
+                Some(Value::Object(value)) => v = value.get(k),
+                Some(_) => return None,
+                None => match <Self as Object>::get(self, k) {
+                    Some(value) => v = Some(value),
+                    None => return None,
                 },
-                None => {
-                    v = match <Self as Object>::get(self, k) {
-                        Some(v) => Some(v),
-                        None => return None,
-                    }
-                }
             }
         }
         v
