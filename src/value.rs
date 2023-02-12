@@ -203,6 +203,7 @@ impl<'a> Value<'a> {
 ///     }
 /// }
 /// ```
+#[cfg(not(feature = "sync"))]
 pub trait AsValue {
     /// Returns the implemented type as a `Value`
     ///
@@ -213,6 +214,10 @@ pub trait AsValue {
     ///
     /// let value = "foobar".as_value();
     /// ```
+    fn as_value(&self) -> Value<'_>;
+}
+#[cfg(feature = "sync")]
+pub trait AsValue: Send + Sync {
     fn as_value(&self) -> Value<'_>;
 }
 
@@ -368,6 +373,7 @@ impl_as_value_uint!(usize);
 /// }
 /// ```
 #[allow(clippy::len_without_is_empty)]
+#[cfg(not(feature = "sync"))]
 pub trait Array {
     /// Returns a boxed iterator of `Value` items.
     ///
@@ -401,6 +407,11 @@ pub trait Array {
     ///
     /// assert_eq!(len, 1);
     /// ```
+    fn len(&self) -> usize;
+}
+#[cfg(feature = "sync")]
+pub trait Array: Send + Sync {
+    fn iter(&self) -> Box<dyn Iterator<Item = Value<'_>> + '_>;
     fn len(&self) -> usize;
 }
 
@@ -533,6 +544,7 @@ where
 /// assert_eq!(value.as_str(), Some("foobar"));
 /// ```
 #[allow(clippy::len_without_is_empty)]
+#[cfg(not(feature = "sync"))]
 pub trait Object {
     /// Looks for a `Value` by key and returns it if found. The provided implementation will split
     /// the key on `.` to handle nesting.
@@ -558,6 +570,26 @@ pub trait Object {
     fn keys(&self) -> Vec<Cow<'_, str>>;
 
     /// Returns the number of elements in the object.
+    fn len(&self) -> usize;
+}
+#[cfg(feature = "sync")]
+pub trait Object: Send + Sync {
+    fn find(&self, key: &str) -> Option<Value<'_>> {
+        let mut v: Option<Value<'_>> = None;
+        for k in key.split('.') {
+            match v {
+                Some(Value::Object(value)) => v = value.get(k),
+                Some(_) => return None,
+                None => match <Self as Object>::get(self, k) {
+                    Some(value) => v = Some(value),
+                    None => return None,
+                },
+            }
+        }
+        v
+    }
+    fn get(&self, key: &str) -> Option<Value<'_>>;
+    fn keys(&self) -> Vec<Cow<'_, str>>;
     fn len(&self) -> usize;
 }
 

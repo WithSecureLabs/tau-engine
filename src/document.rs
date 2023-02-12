@@ -32,8 +32,13 @@ use crate::value::{Object, Value};
 ///     }
 /// }
 /// ```
+#[cfg(not(feature = "sync"))]
 pub trait Document {
     /// Looks for a `Value` by key and returns it if found.
+    fn find(&self, key: &str) -> Option<Value<'_>>;
+}
+#[cfg(feature = "sync")]
+pub trait Document: Send + Sync {
     fn find(&self, key: &str) -> Option<Value<'_>>;
 }
 

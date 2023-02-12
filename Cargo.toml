@@ -29,6 +29,7 @@ benchmarks = []
 ignore_case = []
 core = ["lazy_static"]
 json = ["serde_json"]
+sync = []
 
 
 [package.metadata.docs.rs]
