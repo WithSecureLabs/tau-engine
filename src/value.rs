@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use std::hash::BuildHasher;
 
 /// A dynamic data type that the solver can reason on.
 #[derive(Clone)]
@@ -593,9 +594,32 @@ pub trait Object: Send + Sync {
     fn len(&self) -> usize;
 }
 
-impl<V> Object for HashMap<String, V>
+#[cfg(not(feature = "sync"))]
+impl<V, S> Object for HashMap<String, V, S>
 where
     V: AsValue,
+    S: BuildHasher,
+{
+    #[inline]
+    fn get(&self, key: &str) -> Option<Value<'_>> {
+        self.get(key).map(|v| v.as_value())
+    }
+
+    #[inline]
+    fn keys(&self) -> Vec<Cow<'_, str>> {
+        self.keys().map(|s| Cow::Borrowed(s.as_str())).collect()
+    }
+
+    #[inline]
+    fn len(&self) -> usize {
+        self.len()
+    }
+}
+#[cfg(feature = "sync")]
+impl<V, S> Object for HashMap<String, V, S>
+where
+    V: AsValue,
+    S: BuildHasher + Send + Sync,
 {
     #[inline]
     fn get(&self, key: &str) -> Option<Value<'_>> {
