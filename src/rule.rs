@@ -106,7 +106,7 @@ impl<'de> Deserialize<'de> for Detection {
                     if i > 1 {
                         if let Token::Modifier(m) = &tokens[i - 2] {
                             match m {
-                                ModSym::Int | ModSym::Not | ModSym::Str => {
+                                ModSym::Flt | ModSym::Int | ModSym::Not | ModSym::Str => {
                                     i += 1;
                                     continue;
                                 }

@@ -1,0 +1,13 @@
+detection:
+  A:
+    flt(foo):
+      bar: 1.0
+  condition: A
+
+true_positives:
+  - foo:
+      bar: "1.0"
+
+true_negatives:
+  - for:
+      bar: "0.0"

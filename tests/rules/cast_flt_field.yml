@@ -1,0 +1,12 @@
+detection:
+  A:
+    flt(value): 1.0
+  condition: A
+
+true_positives:
+  - value: 1.0
+  - value: "1.0"
+
+true_negatives:
+  - value: 0.0
+  - value: "0.0"

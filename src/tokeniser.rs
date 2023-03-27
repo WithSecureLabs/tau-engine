@@ -50,6 +50,8 @@ pub enum DelSym {
 /// Modifier Symbols.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ModSym {
+    /// `flt`
+    Flt,
     /// `int`
     Int,
     /// `not`
@@ -60,6 +62,7 @@ pub enum ModSym {
 impl fmt::Display for ModSym {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Flt => write!(f, "flt"),
             Self::Int => write!(f, "int"),
             Self::Not => write!(f, "not"),
             Self::Str => write!(f, "str"),
@@ -118,7 +121,7 @@ impl Token {
                 MiscSym::Not => 95,
             },
             Token::Modifier(ref m) => match *m {
-                ModSym::Int | ModSym::Not | ModSym::Str => 60,
+                ModSym::Flt | ModSym::Int | ModSym::Not | ModSym::Str => 60,
             },
             Token::Match(ref s) => match *s {
                 MatchSym::All | MatchSym::Of => 60,
@@ -172,7 +175,10 @@ impl Tokeniser for String {
                     }
                 }
                 'a'..='z' | 'A'..='Z' | '#' => {
-                    if match_ahead(&mut it, "int(") {
+                    if match_ahead(&mut it, "flt(") {
+                        tokens.push(Token::Modifier(ModSym::Flt));
+                        it.nth(2);
+                    } else if match_ahead(&mut it, "int(") {
                         tokens.push(Token::Modifier(ModSym::Int));
                         it.nth(2);
                     } else if match_ahead(&mut it, "string(") {
@@ -415,6 +421,20 @@ mod tests {
             vec![
                 Token::Miscellaneous(MiscSym::Not),
                 Token::Identifier("a".to_string()),
+            ],
+            t
+        );
+    }
+
+    #[test]
+    fn tokeniser_mod_flt() {
+        let t = String::from("flt(a)").tokenise().unwrap();
+        assert_eq!(
+            vec![
+                Token::Modifier(ModSym::Flt),
+                Token::Delimiter(DelSym::LeftParenthesis),
+                Token::Identifier("a".to_string()),
+                Token::Delimiter(DelSym::RightParenthesis),
             ],
             t
         );

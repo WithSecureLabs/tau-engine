@@ -173,234 +173,365 @@ pub(crate) fn solve_expression(
                 | BoolSym::GreaterThanOrEqual
                 | BoolSym::LessThan
                 | BoolSym::LessThanOrEqual => {
-                    // FIXME: Some very basic float support...
-                    let float = match (left.as_ref(), right.as_ref()) {
-                        (Expression::Float(_), _) | (_, Expression::Float(_)) => true,
-                        (_, _) => false,
-                    };
-                    if float {
-                        let x = match left.as_ref() {
-                            Expression::Field(f) => {
-                                let i = match document.find(f) {
-                                    Some(i) => i,
-                                    None => {
-                                        debug!(
-                                            "evaluating missing, no left hand side for {}",
-                                            expression
-                                        );
-                                        return SolverResult::Missing;
-                                    }
-                                };
-                                match i.as_f64() {
-                                    Some(v) => v,
-                                    None => {
-                                        debug!(
-                                            "evaluating false, no left hand side for {}",
-                                            expression
-                                        );
-                                        return SolverResult::False;
-                                    }
+                    let x = match left.as_ref() {
+                        Expression::Field(f) => {
+                            let i = match document.find(f) {
+                                Some(i) => i,
+                                None => {
+                                    debug!(
+                                        "evaluating missing, no left hand side for {}",
+                                        expression
+                                    );
+                                    return SolverResult::Missing;
+                                }
+                            };
+                            match i {
+                                Value::Float(_) | Value::Int(_) | Value::UInt(_) => i,
+                                _ => {
+                                    debug!(
+                                        "evaluating false, no left hand side for {}",
+                                        expression
+                                    );
+                                    return SolverResult::False;
                                 }
                             }
-                            Expression::Float(f) => *f,
-                            _ => {
-                                debug!("encountered invalid left hand side for {}", expression);
-                                return SolverResult::False;
-                            }
-                        };
-                        let y = match right.as_ref() {
-                            Expression::Field(f) => {
-                                let i = match document.find(f) {
-                                    Some(i) => i,
-                                    None => {
-                                        debug!(
-                                            "evaluating missing, no right hand side for {}",
-                                            expression
-                                        );
-                                        return SolverResult::Missing;
-                                    }
-                                };
-                                match i.as_f64() {
-                                    Some(v) => v,
-                                    None => {
-                                        debug!(
-                                            "evaluating false, no right hand side for {}",
-                                            expression
-                                        );
-                                        return SolverResult::False;
-                                    }
-                                }
-                            }
-                            Expression::Float(i) => *i,
-                            _ => {
-                                debug!("encountered invalid right hand side for {}", expression);
-                                return SolverResult::False;
-                            }
-                        };
-                        let res = match *op {
-                            BoolSym::Equal => x == y,
-                            BoolSym::GreaterThan => x > y,
-                            BoolSym::GreaterThanOrEqual => x >= y,
-                            BoolSym::LessThan => x < y,
-                            BoolSym::LessThanOrEqual => x <= y,
-                            _ => unreachable!(),
-                        };
-                        match res {
-                            true => SolverResult::True,
-                            _ => SolverResult::False,
                         }
-                    } else {
-                        let x = match left.as_ref() {
-                            Expression::Field(f) => {
-                                let i = match document.find(f) {
-                                    Some(i) => i,
-                                    None => {
-                                        debug!(
-                                            "evaluating missing, no left hand side for {}",
-                                            expression
-                                        );
-                                        return SolverResult::Missing;
-                                    }
-                                };
-                                match i.to_i64() {
-                                    Some(v) => v,
-                                    None => {
-                                        debug!(
-                                            "evaluating false, no left hand side for {}",
-                                            expression
-                                        );
-                                        return SolverResult::False;
+                        Expression::Cast(field, ModSym::Flt) => {
+                            let i = match document.find(field) {
+                                Some(i) => i,
+                                None => {
+                                    debug!(
+                                        "evaluating missing, no left hand side for {}",
+                                        expression
+                                    );
+                                    return SolverResult::Missing;
+                                }
+                            };
+                            match i {
+                                Value::Bool(x) => {
+                                    if x {
+                                        Value::Float(1.0)
+                                    } else {
+                                        Value::Float(1.0)
                                     }
                                 }
-                            }
-                            Expression::Cast(field, ModSym::Int) => {
-                                let i = match document.find(field) {
-                                    Some(i) => i,
-                                    None => {
+                                Value::Float(x) => Value::Float(x),
+                                Value::Int(x) => {
+                                    if x <= f64::MAX as i64 {
+                                        Value::Float(x as f64)
+                                    } else {
                                         debug!(
-                                            "evaluating missing, no left hand side for {}",
-                                            expression
-                                        );
-                                        return SolverResult::Missing;
-                                    }
-                                };
-                                match i {
-                                    Value::Bool(x) => {
-                                        if x {
-                                            1
-                                        } else {
-                                            0
-                                        }
-                                    }
-                                    Value::Int(x) => x,
-                                    Value::String(x) => match x.parse::<i64>() {
-                                        Ok(i) => i,
-                                        Err(e) => {
-                                            debug!(
-                                                "evaluating false, could not cast left hand side for {} - {}",
-                                                expression, e
-                                            );
-                                            return SolverResult::False;
-                                        }
-                                    },
-                                    Value::UInt(x) => {
-                                        if x <= i64::MAX as u64 {
-                                            x as i64
-                                        } else {
-                                            debug!(
                                                 "evaluating false, could not cast left hand side for {} - {}",
                                                 expression, x
                                             );
-                                            return SolverResult::False;
-                                        }
-                                    }
-                                    _ => {
-                                        debug!(
-                                            "evaluating false, invalid type on left hand side for {}",
-                                            expression
-                                        );
                                         return SolverResult::False;
                                     }
                                 }
-                            }
-                            Expression::Integer(i) => *i,
-                            _ => {
-                                debug!("encountered invalid left hand side for {}", expression);
-                                return SolverResult::False;
-                            }
-                        };
-                        let y = match right.as_ref() {
-                            Expression::Field(f) => {
-                                let i = match document.find(f) {
-                                    Some(i) => i,
-                                    None => {
+                                Value::String(x) => match x.parse::<f64>() {
+                                    Ok(i) => Value::Float(i),
+                                    Err(e) => {
                                         debug!(
-                                            "evaluating missing, no right hand side for {}",
-                                            expression
-                                        );
-                                        return SolverResult::Missing;
+                                                "evaluating false, could not cast left hand side for {} - {}",
+                                                expression, e
+                                            );
+                                        return SolverResult::False;
                                     }
-                                };
-                                match i.to_i64() {
-                                    Some(v) => v,
-                                    None => {
+                                },
+                                Value::UInt(x) => {
+                                    if x <= f64::MAX as u64 {
+                                        Value::Float(x as f64)
+                                    } else {
                                         debug!(
-                                            "evaluating false, no right hand side for {}",
-                                            expression
-                                        );
+                                                "evaluating false, could not cast left hand side for {} - {}",
+                                                expression, x
+                                            );
                                         return SolverResult::False;
                                     }
                                 }
+                                _ => {
+                                    debug!(
+                                        "evaluating false, invalid type on left hand side for {}",
+                                        expression
+                                    );
+                                    return SolverResult::False;
+                                }
                             }
-                            Expression::Cast(field, ModSym::Int) => {
-                                let i = match document.find(field) {
-                                    Some(i) => i,
-                                    None => {
-                                        debug!(
-                                            "evaluating missing, no right hand side for {}",
-                                            expression
-                                        );
-                                        return SolverResult::Missing;
+                        }
+                        Expression::Cast(field, ModSym::Int) => {
+                            let i = match document.find(field) {
+                                Some(i) => i,
+                                None => {
+                                    debug!(
+                                        "evaluating missing, no left hand side for {}",
+                                        expression
+                                    );
+                                    return SolverResult::Missing;
+                                }
+                            };
+                            match i {
+                                Value::Bool(x) => {
+                                    if x {
+                                        Value::Int(1)
+                                    } else {
+                                        Value::Int(0)
                                     }
-                                };
-                                match i.to_string() {
-                                    Some(v) => match v.parse::<i64>() {
-                                        Ok(i) => i,
-                                        Err(e) => {
-                                            debug!(
-                                            "evaluating false, could not cast right hand side for {} - {}",
-                                            expression, e
-                                        );
-                                            return SolverResult::False;
-                                        }
-                                    },
-                                    None => {
+                                }
+                                Value::Float(x) => Value::Int(x.round() as i64),
+                                Value::Int(x) => Value::Int(x),
+                                Value::String(x) => match x.parse::<i64>() {
+                                    Ok(i) => Value::Int(i),
+                                    Err(e) => {
                                         debug!(
+                                                "evaluating false, could not cast left hand side for {} - {}",
+                                                expression, e
+                                            );
+                                        return SolverResult::False;
+                                    }
+                                },
+                                Value::UInt(x) => {
+                                    if x <= i64::MAX as u64 {
+                                        Value::Int(x as i64)
+                                    } else {
+                                        debug!(
+                                                "evaluating false, could not cast left hand side for {} - {}",
+                                                expression, x
+                                            );
+                                        return SolverResult::False;
+                                    }
+                                }
+                                _ => {
+                                    debug!(
+                                        "evaluating false, invalid type on left hand side for {}",
+                                        expression
+                                    );
+                                    return SolverResult::False;
+                                }
+                            }
+                        }
+                        Expression::Boolean(i) => Value::Bool(*i),
+                        Expression::Float(i) => Value::Float(*i),
+                        Expression::Integer(i) => Value::Int(*i),
+                        _ => {
+                            debug!("encountered invalid left hand side for {}", expression);
+                            return SolverResult::False;
+                        }
+                    };
+                    let y = match right.as_ref() {
+                        Expression::Field(f) => {
+                            let i = match document.find(f) {
+                                Some(i) => i,
+                                None => {
+                                    debug!(
+                                        "evaluating missing, no right hand side for {}",
+                                        expression
+                                    );
+                                    return SolverResult::Missing;
+                                }
+                            };
+                            match i {
+                                Value::Float(_) | Value::Int(_) | Value::UInt(_) => i,
+                                _ => {
+                                    debug!(
+                                        "evaluating false, no right hand side for {}",
+                                        expression
+                                    );
+                                    return SolverResult::False;
+                                }
+                            }
+                        }
+                        Expression::Cast(field, ModSym::Flt) => {
+                            let i = match document.find(field) {
+                                Some(i) => i,
+                                None => {
+                                    debug!(
+                                        "evaluating missing, no right hand side for {}",
+                                        expression
+                                    );
+                                    return SolverResult::Missing;
+                                }
+                            };
+                            match i {
+                                Value::Bool(x) => {
+                                    if x {
+                                        Value::Float(1.0)
+                                    } else {
+                                        Value::Float(1.0)
+                                    }
+                                }
+                                Value::Float(x) => Value::Float(x),
+                                Value::Int(x) => {
+                                    if x <= f64::MAX as i64 {
+                                        Value::Float(x as f64)
+                                    } else {
+                                        debug!(
+                                                "evaluating false, could not cast right hand side for {} - {}",
+                                                expression, x
+                                            );
+                                        return SolverResult::False;
+                                    }
+                                }
+                                Value::String(x) => match x.parse::<f64>() {
+                                    Ok(i) => Value::Float(i),
+                                    Err(e) => {
+                                        debug!(
+                                                "evaluating false, could not cast right hand side for {} - {}",
+                                                expression, e
+                                            );
+                                        return SolverResult::False;
+                                    }
+                                },
+                                Value::UInt(x) => {
+                                    if x <= f64::MAX as u64 {
+                                        Value::Float(x as f64)
+                                    } else {
+                                        debug!(
+                                                "evaluating false, could not cast right hand side for {} - {}",
+                                                expression, x
+                                            );
+                                        return SolverResult::False;
+                                    }
+                                }
+                                _ => {
+                                    debug!(
                                         "evaluating false, invalid type on right hand side for {}",
                                         expression
                                     );
+                                    return SolverResult::False;
+                                }
+                            }
+                        }
+                        Expression::Cast(field, ModSym::Int) => {
+                            let i = match document.find(field) {
+                                Some(i) => i,
+                                None => {
+                                    debug!(
+                                        "evaluating missing, no right hand side for {}",
+                                        expression
+                                    );
+                                    return SolverResult::Missing;
+                                }
+                            };
+                            match i {
+                                Value::Bool(x) => {
+                                    if x {
+                                        Value::Int(1)
+                                    } else {
+                                        Value::Int(0)
+                                    }
+                                }
+                                Value::Float(x) => Value::Int(x.round() as i64),
+                                Value::Int(x) => Value::Int(x),
+                                Value::String(x) => match x.parse::<i64>() {
+                                    Ok(i) => Value::Int(i),
+                                    Err(e) => {
+                                        debug!(
+                                                "evaluating false, could not cast right hand side for {} - {}",
+                                                expression, e
+                                            );
+                                        return SolverResult::False;
+                                    }
+                                },
+                                Value::UInt(x) => {
+                                    if x <= i64::MAX as u64 {
+                                        Value::Int(x as i64)
+                                    } else {
+                                        debug!(
+                                                "evaluating false, could not cast right hand side for {} - {}",
+                                                expression, x
+                                            );
                                         return SolverResult::False;
                                     }
                                 }
+                                _ => {
+                                    debug!(
+                                        "evaluating false, invalid type on right hand side for {}",
+                                        expression
+                                    );
+                                    return SolverResult::False;
+                                }
                             }
-                            Expression::Integer(i) => *i,
-                            _ => {
-                                debug!("encountered invalid right hand side for {}", expression);
-                                return SolverResult::False;
-                            }
-                        };
-                        let res = match *op {
-                            BoolSym::Equal => x == y,
-                            BoolSym::GreaterThan => x > y,
-                            BoolSym::GreaterThanOrEqual => x >= y,
-                            BoolSym::LessThan => x < y,
-                            BoolSym::LessThanOrEqual => x <= y,
-                            _ => unreachable!(),
-                        };
-                        match res {
-                            true => SolverResult::True,
-                            _ => SolverResult::False,
                         }
+                        Expression::Boolean(i) => Value::Bool(*i),
+                        Expression::Float(i) => Value::Float(*i),
+                        Expression::Integer(i) => Value::Int(*i),
+                        _ => {
+                            debug!("encountered invalid right hand side for {}", expression);
+                            return SolverResult::False;
+                        }
+                    };
+                    let res = match (x, *op, y) {
+                        (Value::Bool(x), BoolSym::Equal, Value::Bool(y)) => x == y,
+                        (Value::Float(x), BoolSym::Equal, Value::Float(y)) => x == y,
+                        (Value::Int(x), BoolSym::Equal, Value::Int(y)) => x == y,
+                        (Value::UInt(x), BoolSym::Equal, Value::UInt(y)) => x == y,
+                        (Value::UInt(x), BoolSym::Equal, Value::Int(y)) if x <= i64::MAX as u64 => {
+                            x as i64 == y
+                        }
+                        (Value::Int(x), BoolSym::Equal, Value::UInt(y)) if y <= i64::MAX as u64 => {
+                            x == y as i64
+                        }
+                        (_, BoolSym::Equal, _) => false,
+                        (Value::Float(x), BoolSym::GreaterThan, Value::Float(y)) => x > y,
+                        (Value::Int(x), BoolSym::GreaterThan, Value::Int(y)) => x > y,
+                        (Value::UInt(x), BoolSym::GreaterThan, Value::UInt(y)) => x > y,
+                        (Value::UInt(x), BoolSym::GreaterThan, Value::Int(y))
+                            if x <= i64::MAX as u64 =>
+                        {
+                            x as i64 > y
+                        }
+                        (Value::Int(x), BoolSym::GreaterThan, Value::UInt(y))
+                            if y <= i64::MAX as u64 =>
+                        {
+                            x > y as i64
+                        }
+                        (_, BoolSym::GreaterThan, _) => false,
+                        (Value::Float(x), BoolSym::GreaterThanOrEqual, Value::Float(y)) => x >= y,
+                        (Value::Int(x), BoolSym::GreaterThanOrEqual, Value::Int(y)) => x >= y,
+                        (Value::UInt(x), BoolSym::GreaterThanOrEqual, Value::UInt(y)) => x >= y,
+                        (Value::UInt(x), BoolSym::GreaterThanOrEqual, Value::Int(y))
+                            if x <= i64::MAX as u64 =>
+                        {
+                            x as i64 >= y
+                        }
+                        (Value::Int(x), BoolSym::GreaterThanOrEqual, Value::UInt(y))
+                            if y <= i64::MAX as u64 =>
+                        {
+                            x >= y as i64
+                        }
+                        (_, BoolSym::GreaterThanOrEqual, _) => false,
+                        (Value::Float(x), BoolSym::LessThan, Value::Float(y)) => x < y,
+                        (Value::Int(x), BoolSym::LessThan, Value::Int(y)) => x < y,
+                        (Value::UInt(x), BoolSym::LessThan, Value::UInt(y)) => x < y,
+                        (Value::UInt(x), BoolSym::LessThan, Value::Int(y))
+                            if x <= i64::MAX as u64 =>
+                        {
+                            (x as i64) < y
+                        }
+                        (Value::Int(x), BoolSym::LessThan, Value::UInt(y))
+                            if y <= i64::MAX as u64 =>
+                        {
+                            x < y as i64
+                        }
+                        (_, BoolSym::LessThan, _) => false,
+                        (Value::Float(x), BoolSym::LessThanOrEqual, Value::Float(y)) => x <= y,
+                        (Value::Int(x), BoolSym::LessThanOrEqual, Value::Int(y)) => x <= y,
+                        (Value::UInt(x), BoolSym::LessThanOrEqual, Value::UInt(y)) => x <= y,
+                        (Value::UInt(x), BoolSym::LessThanOrEqual, Value::Int(y))
+                            if x <= i64::MAX as u64 =>
+                        {
+                            x as i64 <= y
+                        }
+                        (Value::Int(x), BoolSym::LessThanOrEqual, Value::UInt(y))
+                            if y <= i64::MAX as u64 =>
+                        {
+                            x <= y as i64
+                        }
+                        (_, BoolSym::LessThanOrEqual, _) => false,
+                        _ => unreachable!(),
+                    };
+                    match res {
+                        true => SolverResult::True,
+                        _ => SolverResult::False,
                     }
                 }
                 BoolSym::And => {

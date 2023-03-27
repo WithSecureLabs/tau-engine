@@ -49,6 +49,8 @@ solve_rule!("boolean_expression_greater_than_or_equal");
 solve_rule!("boolean_expression_less_than");
 solve_rule!("boolean_expression_less_than_or_equal");
 solve_rule!("boolean_expression_or");
+solve_rule!("cast_flt");
+solve_rule!("cast_flt_field");
 solve_rule!("cast_int");
 solve_rule!("cast_int_field");
 solve_rule!("cast_str");

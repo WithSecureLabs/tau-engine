@@ -137,6 +137,8 @@ bench_test!("boolean_expression_greater_than_or_equal");
 bench_test!("boolean_expression_less_than");
 bench_test!("boolean_expression_less_than_or_equal");
 bench_test!("boolean_expression_or");
+bench_test!("cast_flt");
+bench_test!("cast_flt_field");
 bench_test!("cast_int");
 bench_test!("cast_int_field");
 bench_test!("cast_str");

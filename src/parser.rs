@@ -227,7 +227,10 @@ where
                 match symbol {
                     BoolSym::Equal => {
                         match left {
-                            Expression::Cast(_, _) | Expression::Integer(_) => {}
+                            Expression::Boolean(_)
+                            | Expression::Cast(_, _)
+                            | Expression::Float(_)
+                            | Expression::Integer(_) => {}
                             _ => {
                                 return Err(crate::error::parse_led_preceding(format!(
                                     "encountered - '{:?}'",
@@ -236,7 +239,10 @@ where
                             }
                         }
                         match right {
-                            Expression::Cast(_, _) | Expression::Integer(_) => {}
+                            Expression::Boolean(_)
+                            | Expression::Cast(_, _)
+                            | Expression::Float(_)
+                            | Expression::Integer(_) => {}
                             _ => {
                                 return Err(crate::error::parse_led_following(format!(
                                     "encountered - '{:?}'",
@@ -247,6 +253,10 @@ where
                         // Type enforcement
                         match (&left, &right) {
                             (
+                                Expression::Cast(_, ModSym::Flt),
+                                Expression::Cast(_, ModSym::Flt),
+                            ) => {}
+                            (
                                 Expression::Cast(_, ModSym::Int),
                                 Expression::Cast(_, ModSym::Int),
                             ) => {}
@@ -254,6 +264,8 @@ where
                                 Expression::Cast(_, ModSym::Str),
                                 Expression::Cast(_, ModSym::Str),
                             ) => {}
+                            (Expression::Cast(_, ModSym::Flt), Expression::Float(_)) => {}
+                            (Expression::Float(_), Expression::Cast(_, ModSym::Flt)) => {}
                             (Expression::Cast(_, ModSym::Int), Expression::Integer(_)) => {}
                             (Expression::Integer(_), Expression::Cast(_, ModSym::Int)) => {}
                             (_, _) => {
@@ -269,7 +281,9 @@ where
                     | BoolSym::LessThan
                     | BoolSym::LessThanOrEqual => {
                         match left {
-                            Expression::Cast(_, _) | Expression::Integer(_) => {}
+                            Expression::Cast(_, _)
+                            | Expression::Float(_)
+                            | Expression::Integer(_) => {}
                             _ => {
                                 return Err(crate::error::parse_led_preceding(format!(
                                     "encountered - '{:?}'",
@@ -278,7 +292,9 @@ where
                             }
                         }
                         match right {
-                            Expression::Cast(_, _) | Expression::Integer(_) => {}
+                            Expression::Cast(_, _)
+                            | Expression::Float(_)
+                            | Expression::Integer(_) => {}
                             _ => {
                                 return Err(crate::error::parse_led_following(format!(
                                     "encountered - '{:?}'",
@@ -289,9 +305,15 @@ where
                         // Type enforcement
                         match (&left, &right) {
                             (
+                                Expression::Cast(_, ModSym::Flt),
+                                Expression::Cast(_, ModSym::Flt),
+                            ) => {}
+                            (
                                 Expression::Cast(_, ModSym::Int),
                                 Expression::Cast(_, ModSym::Int),
                             ) => {}
+                            (Expression::Cast(_, ModSym::Flt), Expression::Float(_)) => {}
+                            (Expression::Float(_), Expression::Cast(_, ModSym::Flt)) => {}
                             (Expression::Cast(_, ModSym::Int), Expression::Integer(_)) => {}
                             (Expression::Integer(_), Expression::Cast(_, ModSym::Int)) => {}
                             (_, _) => {
@@ -380,6 +402,55 @@ where
                     }
                 },
                 Token::Modifier(ref m) => match *m {
+                    ModSym::Flt => {
+                        // We expect Flt(column_identifier)
+                        if let Some(t) = it.next() {
+                            match *t {
+                                Token::Delimiter(DelSym::LeftParenthesis) => {}
+                                _ => {
+                                    return Err(crate::error::parse_invalid_token(format!(
+                                        "NUD expected left parenthesis - '{:?}'",
+                                        t
+                                    )));
+                                }
+                            }
+                        } else {
+                            return Err(crate::error::parse_invalid_token(
+                                "NUD expected left parenthesis",
+                            ));
+                        }
+                        let token = match it.next() {
+                            Some(t) => t,
+                            None => {
+                                return Err(crate::error::parse_invalid_token(
+                                    "NUD expected column identifier",
+                                ));
+                            }
+                        };
+                        if let Some(t) = it.next() {
+                            match *t {
+                                Token::Delimiter(DelSym::RightParenthesis) => {}
+                                _ => {
+                                    return Err(crate::error::parse_invalid_token(format!(
+                                        "NUD expected right parenthesis - '{:?}'",
+                                        t
+                                    )));
+                                }
+                            }
+                        } else {
+                            return Err(crate::error::parse_invalid_token(
+                                "NUD expected right parenthesis",
+                            ));
+                        }
+                        match *token {
+                            Token::Identifier(ref s) => {
+                                Ok(Expression::Cast(s.to_string(), ModSym::Flt))
+                            }
+                            _ => Err(crate::error::parse_invalid_token(
+                                "NUD expected column identifier",
+                            )),
+                        }
+                    }
                     ModSym::Int => {
                         // We expect Int(column_identifier)
                         if let Some(t) = it.next() {
@@ -750,6 +821,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                     Expression::Cast(f, s) => {
                         misc = Some(s.clone());
                         match s {
+                            ModSym::Flt => (Expression::Cast(f.clone(), s), f),
                             ModSym::Int => (Expression::Cast(f.clone(), s), f),
                             ModSym::Not => (Expression::Field(f.clone()), f),
                             ModSym::Str => (Expression::Cast(f.clone(), s), f),
