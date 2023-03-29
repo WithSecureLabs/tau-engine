@@ -109,13 +109,13 @@ impl Token {
     pub fn binding_power(&self) -> u8 {
         match *self {
             Token::Operator(ref s) => match *s {
-                BoolSym::Or => 90,
-                BoolSym::And => 80,
                 BoolSym::Equal
                 | BoolSym::GreaterThan
                 | BoolSym::GreaterThanOrEqual
                 | BoolSym::LessThan
-                | BoolSym::LessThanOrEqual => 70,
+                | BoolSym::LessThanOrEqual => 90,
+                BoolSym::Or => 80,
+                BoolSym::And => 70,
             },
             Token::Miscellaneous(ref m) => match *m {
                 MiscSym::Not => 95,
