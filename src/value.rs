@@ -552,13 +552,37 @@ pub trait Object {
     fn find(&self, key: &str) -> Option<Value<'_>> {
         let mut v: Option<Value<'_>> = None;
         for k in key.split('.') {
-            match v {
-                Some(Value::Object(value)) => v = value.get(k),
-                Some(_) => return None,
-                None => match <Self as Object>::get(self, k) {
-                    Some(value) => v = Some(value),
+            if k.ends_with(']') && k.contains('[') {
+                let mut parts = k.split('[');
+                let k = parts.next().expect("missing key");
+                let i: usize = match parts
+                    .next()
+                    .and_then(|i| i.strip_suffix("]"))
+                    .and_then(|i| i.parse::<usize>().ok())
+                {
+                    Some(i) => i,
                     None => return None,
-                },
+                };
+                match v {
+                    Some(Value::Object(value)) => match value.get(k) {
+                        Some(Value::Array(a)) => v = a.iter().nth(i),
+                        _ => return None,
+                    },
+                    Some(_) => return None,
+                    None => match <Self as Object>::get(self, k) {
+                        Some(Value::Array(a)) => v = a.iter().nth(i),
+                        _ => return None,
+                    },
+                }
+            } else {
+                match v {
+                    Some(Value::Object(value)) => v = value.get(k),
+                    Some(_) => return None,
+                    None => match <Self as Object>::get(self, k) {
+                        Some(value) => v = Some(value),
+                        None => return None,
+                    },
+                }
             }
         }
         v
@@ -578,13 +602,37 @@ pub trait Object: Send + Sync {
     fn find(&self, key: &str) -> Option<Value<'_>> {
         let mut v: Option<Value<'_>> = None;
         for k in key.split('.') {
-            match v {
-                Some(Value::Object(value)) => v = value.get(k),
-                Some(_) => return None,
-                None => match <Self as Object>::get(self, k) {
-                    Some(value) => v = Some(value),
+            if k.ends_with(']') && k.contains('[') {
+                let mut parts = k.split('[');
+                let k = parts.next().expect("missing key");
+                let i: usize = match parts
+                    .next()
+                    .and_then(|i| i.strip_suffix("]"))
+                    .and_then(|i| i.parse::<usize>().ok())
+                {
+                    Some(i) => i,
                     None => return None,
-                },
+                };
+                match v {
+                    Some(Value::Object(value)) => match value.get(k) {
+                        Some(Value::Array(a)) => v = a.iter().nth(i),
+                        _ => return None,
+                    },
+                    Some(_) => return None,
+                    None => match <Self as Object>::get(self, k) {
+                        Some(Value::Array(a)) => v = a.iter().nth(i),
+                        _ => return None,
+                    },
+                }
+            } else {
+                match v {
+                    Some(Value::Object(value)) => v = value.get(k),
+                    Some(_) => return None,
+                    None => match <Self as Object>::get(self, k) {
+                        Some(value) => v = Some(value),
+                        None => return None,
+                    },
+                }
             }
         }
         v

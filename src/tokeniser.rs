@@ -208,7 +208,12 @@ impl Tokeniser for String {
                         it.nth(1);
                     } else {
                         let identifier: String = consume_while(&mut it, |a| {
-                            a.is_alphanumeric() || a == '_' || a == '.' || a == '#'
+                            a.is_alphanumeric()
+                                || a == '_'
+                                || a == '.'
+                                || a == '#'
+                                || a == '['
+                                || a == ']'
                         })
                         .into_iter()
                         .collect();

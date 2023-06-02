@@ -39,6 +39,7 @@ macro_rules! solve_rule {
 }
 
 // Expressions
+solve_rule!("array_indexing");
 solve_rule!("boolean");
 solve_rule!("boolean_group_and");
 solve_rule!("boolean_group_or");

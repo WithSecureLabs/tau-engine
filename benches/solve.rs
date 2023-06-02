@@ -127,6 +127,7 @@ macro_rules! bench_test {
 }
 
 // Expressions
+bench_test!("array_indexing");
 bench_test!("boolean");
 bench_test!("boolean_group_and");
 bench_test!("boolean_group_or");
