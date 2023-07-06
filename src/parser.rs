@@ -3,7 +3,7 @@ use std::fmt;
 use std::iter::Iterator;
 use std::iter::Peekable;
 
-use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
+use aho_corasick::{AhoCorasick, AhoCorasickBuilder, AhoCorasickKind};
 use regex::{Regex, RegexSet, RegexSetBuilder};
 use serde_yaml::{Mapping, Value as Yaml};
 use tracing::debug;
@@ -1024,8 +1024,9 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                                 Box::new(
                                     AhoCorasickBuilder::new()
                                         .ascii_case_insensitive(true)
-                                        .dfa(true)
-                                        .build(vec![c.clone()]),
+                                        .kind(Some(AhoCorasickKind::DFA))
+                                        .build(vec![c.clone()])
+                                        .expect("failed to build dfa"),
                                 ),
                                 vec![MatchType::Contains(c)],
                                 true,
@@ -1042,8 +1043,9 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                                 Box::new(
                                     AhoCorasickBuilder::new()
                                         .ascii_case_insensitive(true)
-                                        .dfa(true)
-                                        .build(vec![c.clone()]),
+                                        .kind(Some(AhoCorasickKind::DFA))
+                                        .build(vec![c.clone()])
+                                        .expect("failed to build dfa"),
                                 ),
                                 vec![MatchType::EndsWith(c)],
                                 true,
@@ -1060,8 +1062,9 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                                 Box::new(
                                     AhoCorasickBuilder::new()
                                         .ascii_case_insensitive(true)
-                                        .dfa(true)
-                                        .build(vec![c.clone()]),
+                                        .kind(Some(AhoCorasickKind::DFA))
+                                        .build(vec![c.clone()])
+                                        .expect("failed to build dfa"),
                                 ),
                                 vec![MatchType::Exact(c)],
                                 true,
@@ -1078,8 +1081,9 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                                 Box::new(
                                     AhoCorasickBuilder::new()
                                         .ascii_case_insensitive(true)
-                                        .dfa(true)
-                                        .build(vec![c.clone()]),
+                                        .kind(Some(AhoCorasickKind::DFA))
+                                        .build(vec![c.clone()])
+                                        .expect("failed to build dfa"),
                                 ),
                                 vec![MatchType::StartsWith(c)],
                                 true,
@@ -1460,7 +1464,12 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                         multiple = true;
                         group.push(Expression::Search(
                             Search::AhoCorasick(
-                                Box::new(AhoCorasickBuilder::new().dfa(true).build(needles)),
+                                Box::new(
+                                    AhoCorasickBuilder::new()
+                                        .kind(Some(AhoCorasickKind::DFA))
+                                        .build(needles)
+                                        .expect("failed to build dfa"),
+                                ),
                                 context,
                                 false,
                             ),
@@ -1476,8 +1485,9 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                             Box::new(
                                 AhoCorasickBuilder::new()
                                     .ascii_case_insensitive(true)
-                                    .dfa(true)
-                                    .build(ineedles),
+                                    .kind(Some(AhoCorasickKind::DFA))
+                                    .build(ineedles)
+                                    .expect("failed to build dfa"),
                             ),
                             icontext,
                             true,

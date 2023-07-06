@@ -1409,21 +1409,21 @@ fn slow_aho(a: &AhoCorasick, m: &[MatchType], value: &str) -> u64 {
             let p = i.pattern();
             match m[p] {
                 MatchType::Contains(_) => {
-                    map |= 1 << p;
+                    map |= 1 << p.as_u64();
                 }
                 MatchType::EndsWith(_) => {
                     if i.end() == value.len() {
-                        map |= 1 << p;
+                        map |= 1 << p.as_u64();
                     }
                 }
                 MatchType::Exact(_) => {
                     if i.start() == 0 && i.end() == value.len() {
-                        map |= 1 << p;
+                        map |= 1 << p.as_u64();
                     }
                 }
                 MatchType::StartsWith(_) => {
                     if i.start() == 0 {
-                        map |= 1 << p;
+                        map |= 1 << p.as_u64();
                     }
                 }
             }

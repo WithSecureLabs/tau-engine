@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use aho_corasick::AhoCorasickBuilder;
+use aho_corasick::{AhoCorasickBuilder, AhoCorasickKind};
 use regex::{RegexBuilder, RegexSetBuilder};
 
 use crate::parser::{Expression, Match, MatchType, Search};
@@ -773,9 +773,10 @@ fn shake_1(expression: Expression) -> Expression {
                             Search::AhoCorasick(
                                 Box::new(
                                     AhoCorasickBuilder::new()
-                                        .dfa(true)
                                         .ascii_case_insensitive(insensitive)
-                                        .build(needles),
+                                        .kind(Some(AhoCorasickKind::DFA))
+                                        .build(needles)
+                                        .expect("failed to build dfa"),
                                 ),
                                 context,
                                 insensitive,
@@ -1098,11 +1099,16 @@ mod tests {
             "ids".to_owned(),
             Box::new(Expression::Search(
                 Search::AhoCorasick(
-                    Box::new(AhoCorasickBuilder::new().dfa(true).build(vec![
-                        "e2ec14cb-299e-4adf-bb09-04a6a8417bca",
-                        "e2ec14cb-299e-4adf-bb09-04a6a8417bcb",
-                        "e2ec14cb-299e-4adf-bb09-04a6a8417bcc",
-                    ])),
+                    Box::new(
+                        AhoCorasickBuilder::new()
+                            .kind(Some(AhoCorasickKind::DFA))
+                            .build(vec![
+                                "e2ec14cb-299e-4adf-bb09-04a6a8417bca",
+                                "e2ec14cb-299e-4adf-bb09-04a6a8417bcb",
+                                "e2ec14cb-299e-4adf-bb09-04a6a8417bcc",
+                            ])
+                            .expect("failed to build dfa"),
+                    ),
                     vec![
                         MatchType::Exact("e2ec14cb-299e-4adf-bb09-04a6a8417bca".to_owned()),
                         MatchType::Exact("e2ec14cb-299e-4adf-bb09-04a6a8417bcb".to_owned()),
@@ -1128,13 +1134,14 @@ mod tests {
                     Search::AhoCorasick(
                         Box::new(
                             AhoCorasickBuilder::new()
-                                .dfa(true)
+                                .kind(Some(AhoCorasickKind::DFA))
                                 .ascii_case_insensitive(false)
                                 .build(vec![
                                     "Quick".to_owned(),
                                     "Brown".to_owned(),
                                     "Fox".to_owned(),
-                                ]),
+                                ])
+                                .expect("failed to build dfa"),
                         ),
                         vec![
                             MatchType::Contains("Quick".to_owned()),
@@ -1150,13 +1157,14 @@ mod tests {
                     Search::AhoCorasick(
                         Box::new(
                             AhoCorasickBuilder::new()
-                                .dfa(true)
+                                .kind(Some(AhoCorasickKind::DFA))
                                 .ascii_case_insensitive(true)
                                 .build(vec![
                                     "quick".to_owned(),
                                     "brown".to_owned(),
                                     "fox".to_owned(),
-                                ]),
+                                ])
+                                .expect("failed to build dfa"),
                         ),
                         vec![
                             MatchType::Contains("quick".to_owned()),
@@ -1249,7 +1257,7 @@ mod tests {
                     Search::AhoCorasick(
                         Box::new(
                             AhoCorasickBuilder::new()
-                                .dfa(true)
+                                .kind(Some(AhoCorasickKind::DFA))
                                 .ascii_case_insensitive(false)
                                 .build(vec![
                                     "Quick".to_owned(),
@@ -1259,7 +1267,8 @@ mod tests {
                                     "bar".to_owned(),
                                     "baz".to_owned(),
                                     "foobar".to_owned(),
-                                ]),
+                                ])
+                                .expect("failed to build dfa"),
                         ),
                         vec![
                             MatchType::Contains("Quick".to_owned()),
@@ -1279,13 +1288,14 @@ mod tests {
                     Search::AhoCorasick(
                         Box::new(
                             AhoCorasickBuilder::new()
-                                .dfa(true)
+                                .kind(Some(AhoCorasickKind::DFA))
                                 .ascii_case_insensitive(true)
                                 .build(vec![
                                     "quick".to_owned(),
                                     "brown".to_owned(),
                                     "fox".to_owned(),
-                                ]),
+                                ])
+                                .expect("failed to build dfa"),
                         ),
                         vec![
                             MatchType::Contains("quick".to_owned()),
@@ -1367,11 +1377,16 @@ mod tests {
             "ids".to_owned(),
             Box::new(Expression::Search(
                 Search::AhoCorasick(
-                    Box::new(AhoCorasickBuilder::new().dfa(true).build(vec![
-                        "e2ec14cb-299e-4adf-bb09-04a6a8417bca",
-                        "e2ec14cb-299e-4adf-bb09-04a6a8417bcb",
-                        "e2ec14cb-299e-4adf-bb09-04a6a8417bcc",
-                    ])),
+                    Box::new(
+                        AhoCorasickBuilder::new()
+                            .kind(Some(AhoCorasickKind::DFA))
+                            .build(vec![
+                                "e2ec14cb-299e-4adf-bb09-04a6a8417bca",
+                                "e2ec14cb-299e-4adf-bb09-04a6a8417bcb",
+                                "e2ec14cb-299e-4adf-bb09-04a6a8417bcc",
+                            ])
+                            .expect("failed to build dfa"),
+                    ),
                     vec![
                         MatchType::Exact("e2ec14cb-299e-4adf-bb09-04a6a8417bca".to_owned()),
                         MatchType::Exact("e2ec14cb-299e-4adf-bb09-04a6a8417bcb".to_owned()),
