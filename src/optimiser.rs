@@ -86,7 +86,7 @@ pub fn matrix(expression: Expression) -> Expression {
             let mut fields: HashMap<String, u32> = HashMap::new();
             for expression in &scratch {
                 match expression {
-                    Expression::BooleanGroup(BoolSym::And, ref expressions) => {
+                    Expression::BooleanGroup(BoolSym::And, expressions) => {
                         let mut valid = true;
                         for expression in expressions {
                             match expression {
@@ -156,7 +156,7 @@ pub fn matrix(expression: Expression) -> Expression {
                         }
                         _ => {}
                     },
-                    Expression::Nested(ref field, _) | Expression::Search(_, ref field, _) => {
+                    Expression::Nested(field, _) | Expression::Search(_, field, _) => {
                         let count = fields.entry(field.clone()).or_insert(0);
                         *count += 1;
                     }
@@ -196,8 +196,8 @@ pub fn matrix(expression: Expression) -> Expression {
                                         }
                                         _ => {}
                                     },
-                                    Expression::Nested(ref field, _)
-                                    | Expression::Search(_, ref field, _) => {
+                                    Expression::Nested(field, _)
+                                    | Expression::Search(_, field, _) => {
                                         if lookup.contains_key(field) {
                                             valid = false;
                                             break;

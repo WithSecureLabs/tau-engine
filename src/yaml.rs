@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 
-pub use serde_yaml::{Mapping, Number, Value as Yaml};
+pub use serde_yaml::{Mapping, Value as Yaml};
 
 use crate::value::{AsValue, Object, Value};
 
@@ -34,7 +34,7 @@ impl AsValue for Yaml {
 impl Object for Mapping {
     #[inline]
     fn get(&self, key: &str) -> Option<Value<'_>> {
-        self.get(&Yaml::String(key.to_string()))
+        self.get(Yaml::String(key.to_string()))
             .map(|v| v.as_value())
     }
 

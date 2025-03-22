@@ -82,9 +82,9 @@ pub(crate) fn solve_expression(
             // Edge cases
             match (&**left, op, &**right) {
                 (
-                    Expression::Cast(ref left, ModSym::Str),
+                    Expression::Cast(left, ModSym::Str),
                     BoolSym::Equal,
-                    Expression::Cast(ref right, ModSym::Str),
+                    Expression::Cast(right, ModSym::Str),
                 ) => {
                     let x = match document.find(left) {
                         Some(x) => x,
@@ -126,7 +126,7 @@ pub(crate) fn solve_expression(
                         return SolverResult::False;
                     }
                 }
-                (Expression::Field(ref left), BoolSym::Equal, Expression::Boolean(b)) => {
+                (Expression::Field(left), BoolSym::Equal, Expression::Boolean(b)) => {
                     let x = match document.find(left) {
                         Some(x) => x,
                         None => {
@@ -150,7 +150,7 @@ pub(crate) fn solve_expression(
                         return SolverResult::False;
                     }
                 }
-                (Expression::Field(ref left), BoolSym::Equal, Expression::Null) => {
+                (Expression::Field(left), BoolSym::Equal, Expression::Null) => {
                     let x = match document.find(left) {
                         Some(x) => x,
                         None => {
@@ -221,9 +221,9 @@ pub(crate) fn solve_expression(
                                         Value::Float(x as f64)
                                     } else {
                                         debug!(
-                                                "evaluating false, could not cast left hand side for {} - {}",
-                                                expression, x
-                                            );
+                                            "evaluating false, could not cast left hand side for {} - {}",
+                                            expression, x
+                                        );
                                         return SolverResult::False;
                                     }
                                 }
@@ -231,9 +231,9 @@ pub(crate) fn solve_expression(
                                     Ok(i) => Value::Float(i),
                                     Err(e) => {
                                         debug!(
-                                                "evaluating false, could not cast left hand side for {} - {}",
-                                                expression, e
-                                            );
+                                            "evaluating false, could not cast left hand side for {} - {}",
+                                            expression, e
+                                        );
                                         return SolverResult::False;
                                     }
                                 },
@@ -242,9 +242,9 @@ pub(crate) fn solve_expression(
                                         Value::Float(x as f64)
                                     } else {
                                         debug!(
-                                                "evaluating false, could not cast left hand side for {} - {}",
-                                                expression, x
-                                            );
+                                            "evaluating false, could not cast left hand side for {} - {}",
+                                            expression, x
+                                        );
                                         return SolverResult::False;
                                     }
                                 }
@@ -282,9 +282,9 @@ pub(crate) fn solve_expression(
                                     Ok(i) => Value::Int(i),
                                     Err(e) => {
                                         debug!(
-                                                "evaluating false, could not cast left hand side for {} - {}",
-                                                expression, e
-                                            );
+                                            "evaluating false, could not cast left hand side for {} - {}",
+                                            expression, e
+                                        );
                                         return SolverResult::False;
                                     }
                                 },
@@ -293,9 +293,9 @@ pub(crate) fn solve_expression(
                                         Value::Int(x as i64)
                                     } else {
                                         debug!(
-                                                "evaluating false, could not cast left hand side for {} - {}",
-                                                expression, x
-                                            );
+                                            "evaluating false, could not cast left hand side for {} - {}",
+                                            expression, x
+                                        );
                                         return SolverResult::False;
                                     }
                                 }
@@ -364,9 +364,9 @@ pub(crate) fn solve_expression(
                                         Value::Float(x as f64)
                                     } else {
                                         debug!(
-                                                "evaluating false, could not cast right hand side for {} - {}",
-                                                expression, x
-                                            );
+                                            "evaluating false, could not cast right hand side for {} - {}",
+                                            expression, x
+                                        );
                                         return SolverResult::False;
                                     }
                                 }
@@ -374,9 +374,9 @@ pub(crate) fn solve_expression(
                                     Ok(i) => Value::Float(i),
                                     Err(e) => {
                                         debug!(
-                                                "evaluating false, could not cast right hand side for {} - {}",
-                                                expression, e
-                                            );
+                                            "evaluating false, could not cast right hand side for {} - {}",
+                                            expression, e
+                                        );
                                         return SolverResult::False;
                                     }
                                 },
@@ -385,9 +385,9 @@ pub(crate) fn solve_expression(
                                         Value::Float(x as f64)
                                     } else {
                                         debug!(
-                                                "evaluating false, could not cast right hand side for {} - {}",
-                                                expression, x
-                                            );
+                                            "evaluating false, could not cast right hand side for {} - {}",
+                                            expression, x
+                                        );
                                         return SolverResult::False;
                                     }
                                 }
@@ -425,9 +425,9 @@ pub(crate) fn solve_expression(
                                     Ok(i) => Value::Int(i),
                                     Err(e) => {
                                         debug!(
-                                                "evaluating false, could not cast right hand side for {} - {}",
-                                                expression, e
-                                            );
+                                            "evaluating false, could not cast right hand side for {} - {}",
+                                            expression, e
+                                        );
                                         return SolverResult::False;
                                     }
                                 },
@@ -436,9 +436,9 @@ pub(crate) fn solve_expression(
                                         Value::Int(x as i64)
                                     } else {
                                         debug!(
-                                                "evaluating false, could not cast right hand side for {} - {}",
-                                                expression, x
-                                            );
+                                            "evaluating false, could not cast right hand side for {} - {}",
+                                            expression, x
+                                        );
                                         return SolverResult::False;
                                     }
                                 }
@@ -1048,7 +1048,7 @@ fn match_all(
                 return SolverResult::Missing;
             }
         }
-    } else if let Expression::Matrix(ref columns, ref rows) = expression {
+    } else if let Expression::Matrix(columns, rows) = expression {
         // NOTE: Field and search widths must be the same or tau will panic, for now this is
         // fine as only the optimiser can write this expression, and for those using core it is
         // on them to ensure they don't break this. There are ways to lock this down and it
@@ -1278,7 +1278,7 @@ fn match_of(
                 return SolverResult::Missing;
             }
         }
-    } else if let Expression::Matrix(ref columns, ref rows) = expression {
+    } else if let Expression::Matrix(columns, rows) = expression {
         // NOTE: Field and search widths must be the same or tau will panic, for now this is
         // fine as only the optimiser can write this expression, and for those using core it is
         // on them to ensure they don't break this. There are ways to lock this down and it
@@ -1342,37 +1342,37 @@ fn search(kind: &Search, value: &str) -> SolverResult {
         Search::Any => {
             return SolverResult::True;
         }
-        Search::Exact(ref i) => {
+        Search::Exact(i) => {
             if i == value {
                 return SolverResult::True;
             }
         }
-        Search::Contains(ref i) => {
+        Search::Contains(i) => {
             if value.contains(i) {
                 return SolverResult::True;
             }
         }
-        Search::EndsWith(ref i) => {
+        Search::EndsWith(i) => {
             if value.ends_with(i) {
                 return SolverResult::True;
             }
         }
-        Search::StartsWith(ref i) => {
+        Search::StartsWith(i) => {
             if value.starts_with(i) {
                 return SolverResult::True;
             }
         }
-        Search::Regex(ref i, _) => {
+        Search::Regex(i, _) => {
             if i.is_match(value) {
                 return SolverResult::True;
             }
         }
-        Search::RegexSet(ref i, _) => {
+        Search::RegexSet(i, _) => {
             if i.is_match(value) {
                 return SolverResult::True;
             }
         }
-        Search::AhoCorasick(ref a, ref m, _) => {
+        Search::AhoCorasick(a, m, _) => {
             for i in a.find_overlapping_iter(value) {
                 match m[i.pattern()] {
                     MatchType::Contains(_) => return SolverResult::True,

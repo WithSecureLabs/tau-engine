@@ -2,7 +2,7 @@
 name = "tau-engine"
 version = "1.13.1"
 authors = ["Alex Kornitzer <a.kornitzer@me.com>"]
-edition = "2018"
+edition = "2024"
 description = "A document tagging library"
 repository = "https://github.com/countercept/tau-engine"
 keywords = ["rule", "search", "tag", "tau"]

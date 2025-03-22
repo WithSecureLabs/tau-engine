@@ -395,7 +395,7 @@ where
                             _ => {
                                 return Err(crate::error::parse_invalid_token(
                                     "NUD expected a negatable expression",
-                                ))
+                                ));
                             }
                         }
                         Ok(Expression::Negate(Box::new(right)))
@@ -839,7 +839,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                                     return Err(crate::error::parse_invalid_ident(format!(
                                         "match condition mut contain a field, encountered - {:?}",
                                         k
-                                    )))
+                                    )));
                                 }
                             }
                         } else {
@@ -851,9 +851,9 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                     }
                     _ => {
                         return Err(crate::error::parse_invalid_ident(format!(
-                        "mapping key must be a string or valid match condition, encountered - {:?}",
-                        k
-                    )))
+                            "mapping key must be a string or valid match condition, encountered - {:?}",
+                            k
+                        )));
                     }
                 };
                 (e, s)
@@ -862,7 +862,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                 return Err(crate::error::parse_invalid_ident(format!(
                     "mapping key must be a string, encountered - {:?}",
                     k
-                )))
+                )));
             }
         };
         let expression = match v {
@@ -921,7 +921,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                 BoolSym::Equal,
                 Box::new(Expression::Null),
             ),
-            Yaml::String(ref s) => {
+            Yaml::String(s) => {
                 let identifier = s.to_owned().into_identifier()?;
                 let mut cast = false;
                 if let Some(ref m) = misc {
@@ -1096,7 +1096,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                     ),
                 }
             }
-            Yaml::Mapping(ref m) => {
+            Yaml::Mapping(m) => {
                 if misc.is_some() {
                     return Err(crate::error::parse_invalid_ident(format!(
                         "nested mappings are not supported when casting or negating a field, encountered - {:?}",
@@ -1105,7 +1105,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                 }
                 Expression::Nested(f.to_owned(), Box::new(parse_mapping(m)?))
             }
-            Yaml::Sequence(ref s) => {
+            Yaml::Sequence(s) => {
                 // TODO: This block could probably be cleaned...
                 // Now we need to be as fast as possible it turns out that builtin strings functions are
                 // fastest when we only need to check a single condition, when we need to check more that
@@ -1239,7 +1239,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                             return Err(crate::error::parse_invalid_ident(format!(
                                 "value must be a mapping or string, encountered - {:?}",
                                 k
-                            )))
+                            )));
                         }
                     };
                     if let Some(ref m) = misc {
