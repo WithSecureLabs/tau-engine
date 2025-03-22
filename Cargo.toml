@@ -1,6 +1,6 @@
 [package]
 name = "tau-engine"
-version = "1.13.1"
+version = "1.14.0"
 authors = ["Alex Kornitzer <a.kornitzer@me.com>"]
 edition = "2024"
 description = "A document tagging library"
