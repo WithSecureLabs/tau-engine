@@ -212,7 +212,7 @@ pub(crate) fn solve_expression(
                                     if x {
                                         Value::Float(1.0)
                                     } else {
-                                        Value::Float(1.0)
+                                        Value::Float(0.0)
                                     }
                                 }
                                 Value::Float(x) => Value::Float(x),
@@ -355,7 +355,7 @@ pub(crate) fn solve_expression(
                                     if x {
                                         Value::Float(1.0)
                                     } else {
-                                        Value::Float(1.0)
+                                        Value::Float(0.0)
                                     }
                                 }
                                 Value::Float(x) => Value::Float(x),
