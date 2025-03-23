@@ -66,7 +66,7 @@ impl<'de> Deserialize<'de> for Detection {
                             expression = Some(map.next_value::<String>()?);
                         }
                         _ => {
-                            if identifiers.get(&key).is_some() {
+                            if identifiers.contains_key(&key) {
                                 return Err(de::Error::custom(format_args!(
                                     "duplicate field `{}`",
                                     key
@@ -471,6 +471,9 @@ impl Rule {
     }
 
     /// Load a rule from a YAML string.
+    // NOTE: We allow this because if we change it now it will be a breaking change and this is not
+    // worth creating a version 2.0 over...
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> crate::Result<Self> {
         serde_yaml::from_str(s).map_err(crate::error::rule_invalid)
     }

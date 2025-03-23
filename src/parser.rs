@@ -88,6 +88,7 @@ impl PartialEq for Search {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
     BooleanGroup(BoolSym, Vec<Expression>),
+    #[allow(clippy::enum_variant_names)]
     BooleanExpression(Box<Expression>, BoolSym, Box<Expression>),
     Boolean(bool),
     Cast(String, ModSym),
@@ -213,15 +214,7 @@ where
     match it.next() {
         Some(t) => match *t {
             Token::Operator(ref s) => {
-                let symbol = match *s {
-                    BoolSym::And => BoolSym::And,
-                    BoolSym::Equal => BoolSym::Equal,
-                    BoolSym::GreaterThan => BoolSym::GreaterThan,
-                    BoolSym::GreaterThanOrEqual => BoolSym::GreaterThanOrEqual,
-                    BoolSym::LessThan => BoolSym::LessThan,
-                    BoolSym::LessThanOrEqual => BoolSym::LessThanOrEqual,
-                    BoolSym::Or => BoolSym::Or,
-                };
+                let symbol = *s;
                 let right = parse_expr(it, t.binding_power())?;
                 // Handle special limited cases
                 match symbol {

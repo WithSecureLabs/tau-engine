@@ -124,9 +124,9 @@
 //! The following are a list of features that can be enabled or disabled:
 //! - **core**: Exposes some of Tau Engine's internals.
 //! - **ignore_case**: Force the engine to always be case insensitive, this will ignore
-//! the `i` prefix and for that reason is not compatible with case sensitive rules.
+//!     the `i` prefix and for that reason is not compatible with case sensitive rules.
 //! - **json**: Enable serde json support, this will allow the tau-engine to solve on
-//! `serde_json::Value`.
+//!     `serde_json::Value`.
 //!
 //!
 //! ### JSON

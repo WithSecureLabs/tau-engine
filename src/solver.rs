@@ -12,7 +12,7 @@ use crate::value::Value;
 
 struct Cache<'a>(&'a Vec<Option<Value<'a>>>);
 
-impl<'a> Document for Cache<'a> {
+impl Document for Cache<'_> {
     fn find(&self, key: &str) -> Option<Value> {
         let i = key.chars().nth(0).expect("could not get key") as u32;
         self.0[i as usize].clone()
@@ -21,7 +21,7 @@ impl<'a> Document for Cache<'a> {
 
 struct Passthrough<'a>(Option<Value<'a>>);
 
-impl<'a> Document for Passthrough<'a> {
+impl Document for Passthrough<'_> {
     fn find(&self, _: &str) -> Option<Value> {
         self.0.clone()
     }
@@ -535,12 +535,12 @@ pub(crate) fn solve_expression(
                     }
                 }
                 BoolSym::And => {
-                    let x = match solve_expression(&*left, identifiers, document) {
+                    let x = match solve_expression(left, identifiers, document) {
                         SolverResult::True => (true, false),
                         SolverResult::False => return SolverResult::False,
                         SolverResult::Missing => return SolverResult::Missing,
                     };
-                    let y = match solve_expression(&*right, identifiers, document) {
+                    let y = match solve_expression(right, identifiers, document) {
                         SolverResult::True => (true, false),
                         SolverResult::False => (false, false),
                         SolverResult::Missing => (false, true),
@@ -560,12 +560,12 @@ pub(crate) fn solve_expression(
                     }
                 }
                 BoolSym::Or => {
-                    let x = match solve_expression(&*left, identifiers, document) {
+                    let x = match solve_expression(left, identifiers, document) {
                         SolverResult::True => return SolverResult::True,
                         SolverResult::False => (false, false),
                         SolverResult::Missing => (false, true),
                     };
-                    let y = match solve_expression(&*right, identifiers, document) {
+                    let y = match solve_expression(right, identifiers, document) {
                         SolverResult::True => (true, false),
                         SolverResult::False => (false, false),
                         SolverResult::Missing => (false, true),

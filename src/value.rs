@@ -23,7 +23,7 @@ pub enum Value<'a> {
     Object(&'a dyn Object),
 }
 
-impl<'a> Value<'a> {
+impl Value<'_> {
     /// Returns true if the `Value` is an Array.
     #[inline]
     pub fn is_array(&self) -> bool {
@@ -555,14 +555,10 @@ pub trait Object {
             if k.ends_with(']') && k.contains('[') {
                 let mut parts = k.split('[');
                 let k = parts.next().expect("missing key");
-                let i: usize = match parts
+                let i: usize = parts
                     .next()
                     .and_then(|i| i.strip_suffix("]"))
-                    .and_then(|i| i.parse::<usize>().ok())
-                {
-                    Some(i) => i,
-                    None => return None,
-                };
+                    .and_then(|i| i.parse::<usize>().ok())?;
                 match v {
                     Some(Value::Object(value)) => match value.get(k) {
                         Some(Value::Array(a)) => v = a.iter().nth(i),

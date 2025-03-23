@@ -165,15 +165,14 @@ pub fn matrix(expression: Expression) -> Expression {
             }
 
             let mut matrix = false;
-            for (_, count) in &fields {
+            for count in fields.values() {
                 if *count > 1 && *count < 256 {
                     matrix = true;
                 }
             }
 
             if matrix {
-                let mut columns: Vec<(String, u32)> =
-                    fields.into_iter().map(|(k, v)| (k, v)).collect();
+                let mut columns: Vec<(String, u32)> = fields.into_iter().collect();
                 columns.sort_by(|x, y| x.1.cmp(&y.1));
                 let columns: Vec<String> = columns.into_iter().map(|(c, _)| c).collect();
                 let mut rows = vec![];
@@ -490,8 +489,7 @@ pub fn shake(expression: Expression) -> Expression {
     // the main shaking, then once we know they are in a set state, perform additional shaking on
     // top of that...
     let expression = shake_0(expression);
-    let expression = shake_1(expression);
-    expression
+    shake_1(expression)
 }
 
 fn shake_0(expression: Expression) -> Expression {
