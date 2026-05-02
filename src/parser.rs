@@ -1549,27 +1549,27 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                     }
                 }
                 group.extend(rest);
-                if let Expression::Match(Match::All, _) | Expression::Match(Match::Of(_), _) = &e {
-                    if boolean as i32 + mapping as i32 + number as i32 + string as i32 > 1 {
-                        return Err(crate::error::parse_invalid_ident(
-                            "when using sequence modifiers the all expressions must be of the same type",
-                        ));
-                    }
+                if let Expression::Match(Match::All, _) | Expression::Match(Match::Of(_), _) = &e
+                    && boolean as i32 + mapping as i32 + number as i32 + string as i32 > 1
+                {
+                    return Err(crate::error::parse_invalid_ident(
+                        "when using sequence modifiers the all expressions must be of the same type",
+                    ));
                 }
                 if let Some(misc) = &misc {
-                    if let ModSym::Int = misc {
-                        if boolean || mapping || string {
-                            return Err(crate::error::parse_invalid_ident(
-                                "when casting to int all expressions must be of type int",
-                            ));
-                        }
+                    if let ModSym::Int = misc
+                        && (boolean || mapping || string)
+                    {
+                        return Err(crate::error::parse_invalid_ident(
+                            "when casting to int all expressions must be of type int",
+                        ));
                     }
-                    if let ModSym::Str = &misc {
-                        if boolean || mapping || number {
-                            return Err(crate::error::parse_invalid_ident(
-                                "when casting to str all expressions must be of type str",
-                            ));
-                        }
+                    if let ModSym::Str = &misc
+                        && (boolean || mapping || number)
+                    {
+                        return Err(crate::error::parse_invalid_ident(
+                            "when casting to str all expressions must be of type str",
+                        ));
                     }
                 }
                 if group.is_empty() {

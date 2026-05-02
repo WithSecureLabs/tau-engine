@@ -173,7 +173,7 @@ pub fn matrix(expression: Expression) -> Expression {
 
             if matrix {
                 let mut columns: Vec<(String, u32)> = fields.into_iter().collect();
-                columns.sort_by(|x, y| x.1.cmp(&y.1));
+                columns.sort_by_key(|x| x.1);
                 let columns: Vec<String> = columns.into_iter().map(|(c, _)| c).collect();
                 let mut rows = vec![];
                 let mut rest = vec![];

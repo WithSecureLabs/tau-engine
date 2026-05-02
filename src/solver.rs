@@ -13,7 +13,7 @@ use crate::value::Value;
 struct Cache<'a>(&'a Vec<Option<Value<'a>>>);
 
 impl Document for Cache<'_> {
-    fn find(&self, key: &str) -> Option<Value> {
+    fn find(&self, key: &str) -> Option<Value<'_>> {
         let i = key.chars().nth(0).expect("could not get key") as u32;
         self.0[i as usize].clone()
     }
@@ -22,7 +22,7 @@ impl Document for Cache<'_> {
 struct Passthrough<'a>(Option<Value<'a>>);
 
 impl Document for Passthrough<'_> {
-    fn find(&self, _: &str) -> Option<Value> {
+    fn find(&self, _: &str) -> Option<Value<'_>> {
         self.0.clone()
     }
 }
@@ -675,7 +675,7 @@ pub(crate) fn solve_expression(
                                     break;
                                 }
                             };
-                            let _ = std::mem::replace(&mut cache[i], Some(value));
+                            let _ = cache[i].replace(value);
                         }
                         match solve_expression(expression, identifiers, &Cache(&cache)) {
                             SolverResult::True => {}
@@ -748,23 +748,23 @@ pub(crate) fn solve_expression(
                                 for v in a.iter() {
                                     let mut hit = SolverResult::True;
                                     for (i, expression) in row.iter().enumerate() {
-                                        if let Some(expression) = expression {
-                                            if let Some(x) = v.as_object() {
-                                                let value = x.find(&columns[i]);
-                                                match solve_expression(
-                                                    expression,
-                                                    identifiers,
-                                                    &Passthrough(value),
-                                                ) {
-                                                    SolverResult::True => {}
-                                                    SolverResult::False => {
-                                                        hit = SolverResult::False;
-                                                        break;
-                                                    }
-                                                    SolverResult::Missing => {
-                                                        hit = SolverResult::Missing;
-                                                        break;
-                                                    }
+                                        if let Some(expression) = expression
+                                            && let Some(x) = v.as_object()
+                                        {
+                                            let value = x.find(&columns[i]);
+                                            match solve_expression(
+                                                expression,
+                                                identifiers,
+                                                &Passthrough(value),
+                                            ) {
+                                                SolverResult::True => {}
+                                                SolverResult::False => {
+                                                    hit = SolverResult::False;
+                                                    break;
+                                                }
+                                                SolverResult::Missing => {
+                                                    hit = SolverResult::Missing;
+                                                    break;
                                                 }
                                             }
                                         }
@@ -782,10 +782,10 @@ pub(crate) fn solve_expression(
                         }
                     }
                     for v in a.iter() {
-                        if let Some(x) = v.as_object() {
-                            if solve_expression(e, identifiers, &x) == SolverResult::True {
-                                return SolverResult::True;
-                            }
+                        if let Some(x) = v.as_object()
+                            && solve_expression(e, identifiers, &x) == SolverResult::True
+                        {
+                            return SolverResult::True;
                         }
                     }
                     SolverResult::False
@@ -1071,7 +1071,7 @@ fn match_all(
                                 break;
                             }
                         };
-                        let _ = std::mem::replace(&mut cache[i], Some(value));
+                        let _ = cache[i].replace(value);
                     }
                     match solve_expression(expression, identifiers, &Cache(&cache)) {
                         SolverResult::True => {}
@@ -1303,7 +1303,7 @@ fn match_of(
                                 break;
                             }
                         };
-                        let _ = std::mem::replace(&mut cache[i], Some(value));
+                        let _ = cache[i].replace(value);
                     }
                     match solve_expression(expression, identifiers, &Cache(&cache)) {
                         SolverResult::True => {}

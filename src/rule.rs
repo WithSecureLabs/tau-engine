@@ -103,23 +103,23 @@ impl<'de> Deserialize<'de> for Detection {
                 // symbol prefix and skip those if present
                 let mut i = 0;
                 for token in &tokens {
-                    if i > 1 {
-                        if let Token::Modifier(m) = &tokens[i - 2] {
-                            match m {
-                                ModSym::Flt | ModSym::Int | ModSym::Not | ModSym::Str => {
-                                    i += 1;
-                                    continue;
-                                }
+                    if i > 1
+                        && let Token::Modifier(m) = &tokens[i - 2]
+                    {
+                        match m {
+                            ModSym::Flt | ModSym::Int | ModSym::Not | ModSym::Str => {
+                                i += 1;
+                                continue;
                             }
                         }
                     }
-                    if let Token::Identifier(id) = token {
-                        if !identifiers.contains_key(id) {
-                            return Err(de::Error::custom(format_args!(
-                                "invalid condition: identifier not found - {}",
-                                id
-                            )));
-                        }
+                    if let Token::Identifier(id) = token
+                        && !identifiers.contains_key(id)
+                    {
+                        return Err(de::Error::custom(format_args!(
+                            "invalid condition: identifier not found - {}",
+                            id
+                        )));
                     }
                     i += 1;
                 }
