@@ -380,6 +380,7 @@ where
                             Expression::BooleanGroup(_, _)
                             | Expression::BooleanExpression(_, _, _)
                             | Expression::Boolean(_)
+                            | Expression::Cast(_, _)
                             | Expression::Identifier(_)
                             | Expression::Match(_, _)
                             | Expression::Negate(_)
@@ -787,6 +788,7 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
     let mut expressions = vec![];
     for (k, v) in mapping {
         let mut misc: Option<ModSym> = None;
+        let mut negate = false;
         let (e, f) = match k {
             Yaml::String(s) => {
                 // NOTE: Tokenise splits on whitespace, but this is undesired for keys, merge them
@@ -809,7 +811,11 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
                     tokens.push(Token::Identifier(identifier.join(" ")));
                     identifier.clear();
                 }
-                let expr = parse(&tokens)?;
+                let mut expr = parse(&tokens)?;
+                if let Expression::Negate(x) = expr {
+                    expr = *x;
+                    negate = true;
+                }
                 let (e, s) = match expr {
                     Expression::Cast(f, s) => {
                         misc = Some(s.clone());
@@ -1595,6 +1601,8 @@ fn parse_mapping(mapping: &Mapping) -> crate::Result<Expression> {
         };
         if let Some(ModSym::Not) = misc {
             expressions.push(Expression::Negate(Box::new(expression)));
+        } else if negate {
+            expressions.push(Expression::Negate(Box::new(expression)));
         } else {
             expressions.push(expression);
         }
@@ -1730,6 +1738,21 @@ mod tests {
     }
 
     #[test]
+    fn parse_negate_cast() {
+        let identifier = r"not int(foo): 1234";
+        let yaml: Yaml = serde_yaml::from_str(identifier).unwrap();
+        let e = super::parse_identifier(&yaml).unwrap();
+        assert_eq!(
+            Expression::Negate(Box::new(Expression::BooleanExpression(
+                Box::new(Expression::Cast("foo".to_string(), ModSym::Int)),
+                BoolSym::Equal,
+                Box::new(Expression::Integer(1234))
+            ))),
+            e
+        );
+    }
+
+    #[test]
     fn parse_nested() {
         let identifier = r"foo: {bar: baz}";
         let yaml: Yaml = serde_yaml::from_str(identifier).unwrap();
@@ -1847,17 +1870,5 @@ mod tests {
             ),
             e
         );
-    }
-
-    #[test]
-    fn parse_invalid_0() {
-        let e = parse(&vec![
-            Token::Miscellaneous(MiscSym::Not),
-            Token::Modifier(ModSym::Int),
-            Token::Delimiter(DelSym::LeftParenthesis),
-            Token::Identifier("condition".to_string()),
-            Token::Delimiter(DelSym::RightParenthesis),
-        ]);
-        assert!(e.is_err());
     }
 }
