@@ -66,6 +66,29 @@ impl IdentifierParser for String {
                     .build()
                     .map_err(crate::error::parse_invalid_ident)?,
             )
+        } else if string == "*" {
+            Pattern::Any
+        } else if string.starts_with('*') && string.ends_with('*') {
+            let s = if insensitive {
+                string[1..string.len() - 1].to_lowercase()
+            } else {
+                string[1..string.len() - 1].to_string()
+            };
+            Pattern::Contains(s)
+        } else if let Some(s) = string.strip_prefix('*') {
+            let s = if insensitive {
+                s.to_lowercase()
+            } else {
+                s.to_string()
+            };
+            Pattern::EndsWith(s)
+        } else if let Some(s) = string.strip_suffix('*') {
+            let s = if insensitive {
+                s.to_lowercase()
+            } else {
+                s.to_string()
+            };
+            Pattern::StartsWith(s)
         } else if let Some(s) = string.strip_prefix(">=") {
             if s.contains('.') {
                 Pattern::FGreaterThanOrEqual(
@@ -126,29 +149,6 @@ impl IdentifierParser for String {
                         .map_err(crate::error::parse_invalid_ident)?,
                 )
             }
-        } else if string == "*" {
-            Pattern::Any
-        } else if string.starts_with('*') && string.ends_with('*') {
-            let s = if insensitive {
-                string[1..string.len() - 1].to_lowercase()
-            } else {
-                string[1..string.len() - 1].to_string()
-            };
-            Pattern::Contains(s)
-        } else if let Some(s) = string.strip_prefix('*') {
-            let s = if insensitive {
-                s.to_lowercase()
-            } else {
-                s.to_string()
-            };
-            Pattern::EndsWith(s)
-        } else if let Some(s) = string.strip_suffix('*') {
-            let s = if insensitive {
-                s.to_lowercase()
-            } else {
-                s.to_string()
-            };
-            Pattern::StartsWith(s)
         } else if (string.starts_with('"') && string.ends_with('"'))
             || (string.starts_with('\'') && string.ends_with('\''))
         {
