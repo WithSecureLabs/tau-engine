@@ -574,9 +574,9 @@ pub trait Object {
                 match v {
                     Some(Value::Object(value)) => v = value.get(k),
                     Some(_) => return None,
-                    None => match <Self as Object>::get(self, k) {
-                        Some(value) => v = Some(value),
-                        None => return None,
+                    None => {
+                        let value = <Self as Object>::get(self, k)?;
+                        v = Some(value)
                     },
                 }
             }
