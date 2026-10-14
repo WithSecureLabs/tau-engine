@@ -91,63 +91,123 @@ impl IdentifierParser for String {
             Pattern::StartsWith(s)
         } else if let Some(s) = string.strip_prefix(">=") {
             if s.contains('.') {
-                Pattern::FGreaterThanOrEqual(
-                    s.parse::<f64>()
-                        .map_err(crate::error::parse_invalid_ident)?,
-                )
+                if let Ok(x) = s.parse::<f64>() {
+                    Pattern::FGreaterThanOrEqual(x)
+                } else {
+                    let s = if insensitive {
+                        string.to_lowercase()
+                    } else {
+                        string.to_owned()
+                    };
+                    Pattern::Exact(s)
+                }
             } else {
-                Pattern::GreaterThanOrEqual(
-                    s.parse::<i64>()
-                        .map_err(crate::error::parse_invalid_ident)?,
-                )
+                if let Ok(x) = s.parse::<i64>() {
+                    Pattern::GreaterThanOrEqual(x)
+                } else {
+                    let s = if insensitive {
+                        string.to_lowercase()
+                    } else {
+                        string.to_owned()
+                    };
+                    Pattern::Exact(s)
+                }
             }
         } else if let Some(s) = string.strip_prefix('>') {
             if s.contains('.') {
-                Pattern::FGreaterThan(
-                    s.parse::<f64>()
-                        .map_err(crate::error::parse_invalid_ident)?,
-                )
+                if let Ok(x) = s.parse::<f64>() {
+                    Pattern::FGreaterThan(x)
+                } else {
+                    let s = if insensitive {
+                        string.to_lowercase()
+                    } else {
+                        string.to_owned()
+                    };
+                    Pattern::Exact(s)
+                }
             } else {
-                Pattern::GreaterThan(
-                    s.parse::<i64>()
-                        .map_err(crate::error::parse_invalid_ident)?,
-                )
+                if let Ok(x) = s.parse::<i64>() {
+                    Pattern::GreaterThan(x)
+                } else {
+                    let s = if insensitive {
+                        string.to_lowercase()
+                    } else {
+                        string.to_owned()
+                    };
+                    Pattern::Exact(s)
+                }
             }
         } else if let Some(s) = string.strip_prefix("<=") {
             if s.contains('.') {
-                Pattern::FLessThanOrEqual(
-                    s.parse::<f64>()
-                        .map_err(crate::error::parse_invalid_ident)?,
-                )
+                if let Ok(x) = s.parse::<f64>() {
+                    Pattern::FLessThanOrEqual(x)
+                } else {
+                    let s = if insensitive {
+                        string.to_lowercase()
+                    } else {
+                        string.to_owned()
+                    };
+                    Pattern::Exact(s)
+                }
             } else {
-                Pattern::LessThanOrEqual(
-                    s.parse::<i64>()
-                        .map_err(crate::error::parse_invalid_ident)?,
-                )
+                if let Ok(x) = s.parse::<i64>() {
+                    Pattern::LessThanOrEqual(x)
+                } else {
+                    let s = if insensitive {
+                        string.to_lowercase()
+                    } else {
+                        string.to_owned()
+                    };
+                    Pattern::Exact(s)
+                }
             }
         } else if let Some(s) = string.strip_prefix('<') {
             if s.contains('.') {
-                Pattern::FLessThan(
-                    s.parse::<f64>()
-                        .map_err(crate::error::parse_invalid_ident)?,
-                )
+                if let Ok(x) = s.parse::<f64>() {
+                    Pattern::FLessThan(x)
+                } else {
+                    let s = if insensitive {
+                        string.to_lowercase()
+                    } else {
+                        string.to_owned()
+                    };
+                    Pattern::Exact(s)
+                }
             } else {
-                Pattern::LessThan(
-                    s.parse::<i64>()
-                        .map_err(crate::error::parse_invalid_ident)?,
-                )
+                if let Ok(x) = s.parse::<i64>() {
+                    Pattern::LessThan(x)
+                } else {
+                    let s = if insensitive {
+                        string.to_lowercase()
+                    } else {
+                        string.to_owned()
+                    };
+                    Pattern::Exact(s)
+                }
             }
         } else if let Some(s) = string.strip_prefix('=') {
             if s.contains('.') {
-                Pattern::FEqual(
-                    s.parse::<f64>()
-                        .map_err(crate::error::parse_invalid_ident)?,
-                )
+                if let Ok(x) = s.parse::<f64>() {
+                    Pattern::FEqual(x)
+                } else {
+                    let s = if insensitive {
+                        string.to_lowercase()
+                    } else {
+                        string.to_owned()
+                    };
+                    Pattern::Exact(s)
+                }
             } else {
-                Pattern::Equal(
-                    s.parse::<i64>()
-                        .map_err(crate::error::parse_invalid_ident)?,
-                )
+                if let Ok(x) = s.parse::<i64>() {
+                    Pattern::Equal(x)
+                } else {
+                    let s = if insensitive {
+                        string.to_lowercase()
+                    } else {
+                        string.to_owned()
+                    };
+                    Pattern::Exact(s)
+                }
             }
         } else if (string.starts_with('"') && string.ends_with('"'))
             || (string.starts_with('\'') && string.ends_with('\''))
